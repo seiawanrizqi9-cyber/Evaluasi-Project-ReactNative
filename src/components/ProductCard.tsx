@@ -1,80 +1,119 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet, Dimensions, TouchableOpacity, Alert } from 'react-native';
-import { Product } from '../screens/HomeScreen';
+import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import { Product } from '../navigation/types';
 import { colors } from '../color/colors';
-
-interface Props {
-  product: Product;
-}
-
-const { width } = Dimensions.get('window');
-const cardWidth = (width - 40) / 3;
+import { useCart } from '../utils/useCart';
 
 const formatRupiah = (angka: number) => {
   return 'Rp ' + angka.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 };
 
-export default function ProductCard({ product }: Props) {
+interface Props {
+  product: Product;
+  onPress?: (product: Product) => void;
+}
+
+export default function ProductCard({ product, onPress }: Props) {
+  const { addToCart } = useCart();
+
+  // ✅ UBAH: Button pesan langsung tambah ke keranjang TANPA ALERT
   const handlePesan = () => {
-    Alert.alert(
-      'Pesanan Berhasil!',
-      `Barang "${product.nama}" sudah dipesan! 🎉`,
-      [
-        { text: 'OK', style: 'default' }
-      ]
-    );
+    addToCart(product);
+    // ✅ HAPUS ALERT - langsung tambah ke keranjang tanpa notifikasi
   };
 
+  const finalPrice = product.diskon 
+    ? product.harga * (1 - product.diskon / 100)
+    : product.harga;
+
   return (
-    <View style={styles.card}>
-      {product.gambar ? (
-        <Image source={{ uri: product.gambar }} style={styles.image} />
-      ) : (
-        <View style={styles.placeholderImage}>
-          <Text style={styles.placeholderIcon}>📷</Text>
-        </View>
-      )}
-      <View style={styles.info}>
-        <Text style={styles.name} numberOfLines={2}>{product.nama}</Text>
-        <Text style={styles.price}>{formatRupiah(product.harga)}</Text>
-        <Text style={styles.stok}>Stok: {product.stok}</Text>
-        
-        {/* Button Pesan */}
-        <TouchableOpacity style={styles.pesanButton} onPress={handlePesan}>
-          <Text style={styles.pesanButtonText}>Pesan</Text>
-        </TouchableOpacity>
+    <TouchableOpacity 
+      style={styles.card}
+      onPress={() => onPress && onPress(product)}
+      activeOpacity={0.7}
+    >
+      {/* Gambar di Samping Kiri */}
+      <View style={styles.imageContainer}>
+        {product.gambar ? (
+          <Image source={{ uri: product.gambar }} style={styles.image} />
+        ) : (
+          <View style={styles.placeholderImage}>
+            <Text style={styles.placeholderIcon}>📷</Text>
+          </View>
+        )}
       </View>
-    </View>
+
+      {/* Info Produk di Samping Kanan */}
+      <View style={styles.infoContainer}>
+        {/* Nama Produk */}
+        <Text style={styles.name} numberOfLines={2}>
+          {product.nama}
+        </Text>
+        
+        {/* Harga dan Diskon */}
+        <View style={styles.priceSection}>
+          {product.diskon ? (
+            <View style={styles.discountContainer}>
+              <Text style={styles.originalPrice}>
+                {formatRupiah(product.harga)}
+              </Text>
+              <View style={styles.discountInfo}>
+                <Text style={styles.discountPrice}>
+                  {formatRupiah(finalPrice)}
+                </Text>
+                <View style={styles.discountBadge}>
+                  <Text style={styles.discountText}>{product.diskon}%</Text>
+                </View>
+              </View>
+            </View>
+          ) : (
+            <Text style={styles.price}>{formatRupiah(product.harga)}</Text>
+          )}
+        </View>
+
+        {/* Stok dan Button */}
+        <View style={styles.footer}>
+          <Text style={styles.stok}>Stok: {product.stok}</Text>
+          {/* ✅ UBAH: Button pesan langsung tambah ke keranjang TANPA ALERT */}
+          <TouchableOpacity style={styles.pesanButton} onPress={handlePesan}>
+            <Text style={styles.pesanButtonText}>Pesan</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 8,
+    flexDirection: 'row',
+    backgroundColor: colors.cardAccent,
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 12,
+    marginHorizontal: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 8,
     elevation: 3,
-    width: cardWidth,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 8,
+    minHeight: 120,
+  },
+  imageContainer: {
+    marginRight: 12,
   },
   image: {
-    width: '100%',
-    height: 80,
-    borderRadius: 8,
-    marginBottom: 8,
+    width: 100,
+    height: 100,
+    borderRadius: 12,
     backgroundColor: colors.background,
   },
   placeholderImage: {
-    width: '100%',
-    height: 80,
-    borderRadius: 8,
-    marginBottom: 8,
+    width: 100,
+    height: 100,
+    borderRadius: 12,
     backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
@@ -83,42 +122,81 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   placeholderIcon: {
-    fontSize: 20,
+    fontSize: 24,
     color: colors.textLight,
   },
-  info: {
+  infoContainer: {
     flex: 1,
+    justifyContent: 'space-between',
   },
   name: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 4,
-    height: 28,
+    fontSize: 16,
+    fontWeight: '700',
     color: colors.text,
-    lineHeight: 14,
+    lineHeight: 20,
+    marginBottom: 8,
+    flexShrink: 1,
+  },
+  priceSection: {
+    marginBottom: 8,
+  },
+  discountContainer: {
+    flexDirection: 'column',
+  },
+  discountInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  originalPrice: {
+    fontSize: 12,
+    color: colors.textLight,
+    textDecorationLine: 'line-through',
+  },
+  discountPrice: {
+    fontSize: 16,
+    color: colors.discount,
+    fontWeight: '700',
+    marginRight: 8,
+  },
+  discountBadge: {
+    backgroundColor: colors.discount,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  discountText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   price: {
-    fontSize: 11,
+    fontSize: 16,
     color: colors.primary,
     fontWeight: '700',
-    marginBottom: 2,
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
   },
   stok: {
-    fontSize: 10,
+    fontSize: 12,
     color: colors.textLight,
-    marginBottom: 6,
+    flex: 1,
   },
   pesanButton: {
-    backgroundColor: colors.success,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
+    backgroundColor: colors.primary,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    minWidth: 80,
     alignItems: 'center',
-    marginTop: 4,
   },
   pesanButtonText: {
     color: 'white',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: 'bold',
   },
 });

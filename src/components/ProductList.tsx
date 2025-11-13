@@ -1,25 +1,17 @@
-// src/components/ProductList.tsx
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  useWindowDimensions,
-  ScrollView,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import ProductCard from './ProductCard';
-import { Product } from '../screens/HomeScreen';
+import { Product } from '../navigation/types';
 import { colors } from '../color/colors';
-import { getColumnsForGrid, calculateCardWidth } from '../utils/responsive';
 
 interface Props {
   products: Product[];
+  onProductPress?: (product: Product) => void;
 }
 
-export default function ProductList({ products }: Props) {
-  const { width, height } = useWindowDimensions();
-  const columns = getColumnsForGrid(width, height);
-  const cardWidth = calculateCardWidth(width, columns, 12, 4);
+export default function ProductList({ products, onProductPress }: Props) {
+  // ✅ PERBAIKAN: Hapus width dan height yang tidak digunakan
+  // Karena sekarang single column, tidak perlu responsive columns
 
   if (products.length === 0) {
     return (
@@ -32,19 +24,18 @@ export default function ProductList({ products }: Props) {
   }
 
   return (
-    <ScrollView
-      style={styles.scrollContainer}
-      contentContainerStyle={styles.gridContainer}
+    <ScrollView 
+      style={styles.container} 
       showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.scrollContent}
     >
-      <View style={styles.gridWrapper}>
+      <View style={styles.listContainer}>
         {products.map((product) => (
-          <View
-            key={product.id}
-            style={[styles.gridItem, { width: cardWidth }]}
-          >
-            <ProductCard product={product} />
-          </View>
+          <ProductCard 
+            key={product.id} 
+            product={product} 
+            onPress={onProductPress} 
+          />
         ))}
       </View>
     </ScrollView>
@@ -52,30 +43,24 @@ export default function ProductList({ products }: Props) {
 }
 
 const styles = StyleSheet.create({
-  scrollContainer: {
+  container: {
     flex: 1,
+    backgroundColor: colors.background,
   },
-  gridContainer: {
-    padding: 12,
+  scrollContent: {
+    paddingBottom: 20,
   },
-  gridWrapper: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-evenly',
-    alignContent: 'flex-start',
-  },
-  gridItem: {
-    margin: 1, 
+  listContainer: {
+    padding: 8,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 40,
+    padding: 20,
   },
   emptyIcon: {
-    fontSize: 48,
+    fontSize: 64,
     marginBottom: 16,
   },
   emptyText: {
@@ -86,8 +71,8 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   emptySubtext: {
-    color: colors.textLight,
     textAlign: 'center',
     fontSize: 14,
+    color: colors.textLight,
   },
 });

@@ -1,56 +1,177 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import Navbar from '../components/Navbar';
-import ProductList from '../components/ProductList';
-import ProductForm from '../components/ProductForm';
+import React from 'react';
+import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
+import { StyleSheet, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { colors } from '../color/colors';
+import {
+  HomeTopTabParamList,
+  Product,
+  HomeStackParamList,
+} from '../navigation/types';
+import { StackNavigationProp } from '@react-navigation/stack';
 
-export interface Product {
-  id: string;
-  nama: string;
-  harga: number;
-  stok: number;
-  deskripsi: string;
-  gambar: string | null;
-}
+// Import tab screens
+import PopularTab from './tabs/PopularTab';
+import NewTab from './tabs/NewTab';
+import DiscountTab from './tabs/DiscountTab';
+import ElectronicsTab from './tabs/ElectronicsTab';
+import ClothingTab from './tabs/ClothingTab';
+import FoodTab from './tabs/FoodTab';
+import AutomotiveTab from './tabs/AutomotiveTab';
+import EntertainmentTab from './tabs/EntertainmentTab';
+import BabyTab from './tabs/BabyTab';
+
+// Import dummy data dari file terpisah
+import { dummyProducts } from '../data/dummyProducts';
+
+const Tab = createMaterialTopTabNavigator<HomeTopTabParamList>();
+type HomeScreenNavigationProp = StackNavigationProp<HomeStackParamList, 'Home'>;
+
+const createTabWrapper = (
+  Component: React.ComponentType<{
+    products: Product[];
+    onProductPress?: (product: Product) => void;
+  }>,
+  products: Product[],
+  onProductPress: (product: Product) => void,
+) => {
+  return () => (
+    <Component products={products} onProductPress={onProductPress} />
+  );
+};
 
 export default function HomeScreen() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [showModal, setShowModal] = useState(false);
+  const navigation = useNavigation<HomeScreenNavigationProp>();
 
-  const addProduct = (newProduct: Omit<Product, 'id'>) => {
-    const product: Product = {
-      id: Date.now().toString(),
-      ...newProduct,
-    };
-    setProducts([...products, product]);
-    setShowModal(false);
+  const handleProductPress = (product: Product) => {
+    navigation.navigate('ProductDetail', {
+      productId: product.id,
+      productName: product.nama,
+    });
   };
 
   return (
     <View style={styles.container}>
-      <Navbar onAddProduct={() => setShowModal(true)} />
-      
-      <View style={styles.greetingContainer}>
-        <Text style={styles.title}>Selamat datang di Belanja Skuy!</Text>
-        <Text style={styles.description}>
-          Tempat belanja online paling santai tapi lengkap!{'\n'}
-          Dari fashion, gadget, sampai kebutuhan harian — semua ada di sini dengan harga yang bersahabat dan promo yang nggak bikin dompet nangis 💸
-        </Text>
-        <Text style={styles.callToAction}>
-          Yuk, jelajahi produk pilihan terbaik dan nikmati pengalaman belanja yang cepat, aman, dan pastinya anti ribet!
-        </Text>
-        <View style={styles.sloganContainer}>
-          <Text style={styles.slogan}>"Belanja Skuy — Santai, Cepat, Hemat!"</Text>
-        </View>
-      </View>
-
-      <ProductList products={products} />
-      <ProductForm 
-        visible={showModal}
-        onSubmit={addProduct}
-        onClose={() => setShowModal(false)}
-      />
+      <Tab.Navigator
+        screenOptions={{
+          tabBarStyle: {
+            backgroundColor: colors.primary,
+            elevation: 0,
+            shadowOpacity: 0,
+          },
+          tabBarIndicatorStyle: {
+            backgroundColor: colors.textOnPrimary,
+            height: 3,
+          },
+          tabBarLabelStyle: {
+            fontSize: 12,
+            fontWeight: '600',
+            textTransform: 'none',
+          },
+          tabBarActiveTintColor: colors.textOnPrimary,
+          tabBarInactiveTintColor: 'rgba(255,255,255,0.7)',
+          tabBarScrollEnabled: true,
+          tabBarItemStyle: {
+            width: 'auto',
+            paddingHorizontal: 16,
+            minHeight: 48,
+          },
+          
+          // ✅ TAHAP 3: KONFIGURASI SWIPE UNTUK TOP TABS
+          // Biarkan swipe enabled untuk tab switching
+          swipeEnabled: true,
+          
+          // 🎯 LAZY LOADING: Untuk performance
+          lazy: true,
+          
+          // 🎯 ANIMATION: Smooth transition
+          animationEnabled: true,
+          
+          // ❌ HAPUS: gestureHandlerProps tidak didukung di Material Top Tabs
+        }}
+      >
+        <Tab.Screen
+          name="Popular"
+          component={createTabWrapper(
+            PopularTab,
+            dummyProducts.popular,
+            handleProductPress,
+          )}
+          options={{ title: 'Populer' }}
+        />
+        <Tab.Screen
+          name="New"
+          component={createTabWrapper(
+            NewTab,
+            dummyProducts.new,
+            handleProductPress,
+          )}
+          options={{ title: 'Terbaru' }}
+        />
+        <Tab.Screen
+          name="Discount"
+          component={createTabWrapper(
+            DiscountTab,
+            dummyProducts.discount,
+            handleProductPress,
+          )}
+          options={{ title: 'Diskon' }}
+        />
+        <Tab.Screen
+          name="Electronics"
+          component={createTabWrapper(
+            ElectronicsTab,
+            dummyProducts.electronics,
+            handleProductPress,
+          )}
+          options={{ title: 'Elektronik' }}
+        />
+        <Tab.Screen
+          name="Clothing"
+          component={createTabWrapper(
+            ClothingTab,
+            dummyProducts.clothing,
+            handleProductPress,
+          )}
+          options={{ title: 'Pakaian' }}
+        />
+        <Tab.Screen
+          name="Food"
+          component={createTabWrapper(
+            FoodTab,
+            dummyProducts.food,
+            handleProductPress,
+          )}
+          options={{ title: 'Makanan' }}
+        />
+        <Tab.Screen
+          name="Automotive"
+          component={createTabWrapper(
+            AutomotiveTab,
+            dummyProducts.automotive,
+            handleProductPress,
+          )}
+          options={{ title: 'Otomotif' }}
+        />
+        <Tab.Screen
+          name="Entertainment"
+          component={createTabWrapper(
+            EntertainmentTab,
+            dummyProducts.entertainment,
+            handleProductPress,
+          )}
+          options={{ title: 'Hiburan' }}
+        />
+        <Tab.Screen
+          name="Baby"
+          component={createTabWrapper(
+            BabyTab,
+            dummyProducts.baby,
+            handleProductPress,
+          )}
+          options={{ title: 'Bayi' }}
+        />
+      </Tab.Navigator>
     </View>
   );
 }
@@ -59,52 +180,5 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  greetingContainer: {
-    backgroundColor: colors.card,
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 8,
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.primary,
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  description: {
-    fontSize: 14,
-    color: colors.text,
-    lineHeight: 20,
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  callToAction: {
-    fontSize: 13,
-    color: colors.textLight,
-    lineHeight: 18,
-    marginBottom: 16,
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  sloganContainer: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  slogan: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: 'white',
-    textAlign: 'center',
   },
 });
