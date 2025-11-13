@@ -1,17 +1,18 @@
 import React from 'react';
-import { View, Text, FlatList, StyleSheet, Dimensions } from 'react-native';
-import { Product } from '../screens/HomeScreen';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import ProductCard from './ProductCard';
+import { Product } from '../navigation/types';
 import { colors } from '../color/colors';
 
 interface Props {
   products: Product[];
+  onProductPress?: (product: Product) => void;
 }
 
-const { width } = Dimensions.get('window');
-const itemWidth = (width - 40) / 3;
+export default function ProductList({ products, onProductPress }: Props) {
+  // ✅ PERBAIKAN: Hapus width dan height yang tidak digunakan
+  // Karena sekarang single column, tidak perlu responsive columns
 
-export default function ProductList({ products }: Props) {
   if (products.length === 0) {
     return (
       <View style={styles.emptyContainer}>
@@ -23,37 +24,43 @@ export default function ProductList({ products }: Props) {
   }
 
   return (
-    <FlatList
-      data={products}
-      renderItem={({ item }) => (
-        <View style={styles.gridItem}>
-          <ProductCard product={item} />
-        </View>
-      )}
-      keyExtractor={(item) => item.id}
-      numColumns={3}
-      contentContainerStyle={styles.gridContainer}
+    <ScrollView 
+      style={styles.container} 
       showsVerticalScrollIndicator={false}
-    />
+      contentContainerStyle={styles.scrollContent}
+    >
+      <View style={styles.listContainer}>
+        {products.map((product) => (
+          <ProductCard 
+            key={product.id} 
+            product={product} 
+            onPress={onProductPress} 
+          />
+        ))}
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  gridContainer: {
-    padding: 12,
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
   },
-  gridItem: {
-    width: itemWidth,
-    margin: 2,
+  scrollContent: {
+    paddingBottom: 20,
+  },
+  listContainer: {
+    padding: 8,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    padding: 20,
   },
   emptyIcon: {
-    fontSize: 48,
+    fontSize: 64,
     marginBottom: 16,
   },
   emptyText: {
@@ -64,8 +71,8 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   emptySubtext: {
-    color: colors.textLight,
     textAlign: 'center',
     fontSize: 14,
+    color: colors.textLight,
   },
 });
