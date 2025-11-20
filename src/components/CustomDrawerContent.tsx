@@ -14,7 +14,6 @@ import { useAuth } from '../utils/useAuth';
 
 export default function CustomDrawerContent({
   navigation,
-  state,
 }: DrawerContentComponentProps) {
   const { height } = useWindowDimensions();
   const { isLoggedIn, user, logout, loadAuthData } = useAuth();
@@ -25,37 +24,32 @@ export default function CustomDrawerContent({
 
   useEffect(() => {
     refreshAuthData();
-  }, [state.index, refreshAuthData]);
+  }, [refreshAuthData]);
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Keluar',
-      'Apakah Anda yakin ingin keluar?',
-      [
-        { text: 'Batal', style: 'cancel' },
-        { 
-          text: 'Keluar', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await logout();
-              Alert.alert('Sukses', 'Anda telah berhasil keluar');
-            } catch (error) {
-              Alert.alert('Error', 'Gagal keluar, coba lagi');
-            }
+  const handleLogout = useCallback(async () => {
+    Alert.alert('Keluar', 'Apakah Anda yakin ingin keluar?', [
+      { text: 'Batal', style: 'cancel' },
+      {
+        text: 'Keluar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await logout();
+            Alert.alert('Sukses', 'Anda telah berhasil keluar');
+          } catch (error) {
+            Alert.alert('Error', 'Gagal keluar, coba lagi');
           }
         },
-      ]
-    );
-  };
+      },
+    ]);
+  }, [logout]);
 
-  const handleLogin = () => {
-    navigation.navigate('Home', { 
+  const handleLogin = useCallback(() => {
+    navigation.navigate('Login', {
       screen: 'ProfileStack',
     });
-  };
+  }, [navigation]);
 
-  // ✅ FONTAWESOME 6 untuk Drawer - menggunakan icon yang sama dengan BottomTab
   const menuItems = [
     { label: 'Beranda', icon: 'house', tab: 'HomeStack' },
     { label: 'Tentang', icon: 'circle-info', tab: 'About' },
@@ -63,48 +57,79 @@ export default function CustomDrawerContent({
     { label: 'Profil', icon: 'user', tab: 'ProfileStack' },
   ];
 
+  const handleMenuPress = useCallback(
+    (tab: string) => {
+      navigation.navigate('Home', { screen: tab });
+    },
+    [navigation],
+  );
+
   return (
     <View style={[styles.container, { maxHeight: height * 0.9 }]}>
       <View style={styles.header}>
         <View style={styles.userInfo}>
           {isLoggedIn && user ? (
             <>
-              <Text style={styles.userName}>{user.name}</Text>
+              <Text style={styles.userName}>
+                {
+                  user?.firstName && user?.lastName
+                    ? `${user.firstName} ${user.lastName}`
+                    : user?.username || 'User' // ✅ PERBAIKAN: hapus user?.name
+                }
+              </Text>
               <Text style={styles.userEmail}>{user.email}</Text>
             </>
           ) : (
             <>
-              <Text style={styles.userName}>Belum Login</Text>
-              <Text style={styles.userEmail}>Silakan masuk untuk akses penuh</Text>
+              <Text style={styles.userName}>Guest</Text>
+              <Text style={styles.userEmail}>
+                Silakan masuk untuk akses penuh
+              </Text>
             </>
           )}
         </View>
-        
+
         <View style={styles.avatarContainer}>
-          <FontAwesome6 
-            name="circle-user" 
-            size={40} 
-            color={colors.textOnPrimary} 
-          />
+          {isLoggedIn && user ? (
+            <View style={styles.avatarWithLetter}>
+              <Text style={styles.avatarLetter}>
+                {user?.firstName || user?.username ? (
+                  <Text style={styles.avatarLetter}>
+                    {(user.firstName || user.username).charAt(0).toUpperCase()}
+                  </Text>
+                ) : (
+                  <FontAwesome6
+                    name="circle-user"
+                    size={40}
+                    color={colors.textOnPrimary}
+                  />
+                )}
+              </Text>
+            </View>
+          ) : (
+            <FontAwesome6
+              name="circle-user"
+              size={40}
+              color={colors.textOnPrimary}
+            />
+          )}
         </View>
       </View>
 
       <View style={styles.menuContainer}>
-        {menuItems.map((item) => (
+        {menuItems.map(item => (
           <TouchableOpacity
             key={item.tab}
             style={styles.menuItem}
-            onPress={() => navigation.navigate('Home', { screen: item.tab })}
+            onPress={() => handleMenuPress(item.tab)}
           >
-            <FontAwesome6 
-              name={item.icon} 
-              size={20} 
-              color={colors.text} 
+            <FontAwesome6
+              name={item.icon}
+              size={20}
+              color={colors.text}
               style={styles.menuIcon}
             />
-            <Text style={styles.menuLabel}>
-              {item.label}
-            </Text>
+            <Text style={styles.menuLabel}>{item.label}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -112,12 +137,22 @@ export default function CustomDrawerContent({
       <View style={styles.footer}>
         {isLoggedIn ? (
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <FontAwesome6 name="right-from-bracket" size={16} color={colors.error} style={styles.logoutIcon} />
+            <FontAwesome6
+              name="right-from-bracket"
+              size={16}
+              color={colors.error}
+              style={styles.logoutIcon}
+            />
             <Text style={styles.logoutLabel}>Keluar</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-            <FontAwesome6 name="right-to-bracket" size={16} color={colors.primary} style={styles.loginIcon} />
+            <FontAwesome6
+              name="right-to-bracket"
+              size={16}
+              color={colors.primary}
+              style={styles.loginIcon}
+            />
             <Text style={styles.loginLabel}>Masuk</Text>
           </TouchableOpacity>
         )}
@@ -150,6 +185,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  avatarWithLetter: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarLetter: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.textOnPrimary,
   },
   userName: {
     fontSize: 18,

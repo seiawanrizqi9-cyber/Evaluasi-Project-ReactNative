@@ -1,4 +1,5 @@
 import { NavigatorScreenParams } from '@react-navigation/native';
+import { LinkingOptions } from '@react-navigation/native'; // ✅ TAMBAH IMPORT
 
 // Root Drawer Navigator Types
 export type RootDrawerParamList = {
@@ -17,6 +18,13 @@ export type RootDrawerParamList = {
   About: undefined;
   Dashboard: undefined;
   Checkout: undefined;
+  ProductList: undefined;
+  Login: undefined;
+  ProfileStack: NavigatorScreenParams<ProfileStackParamList>;
+  Wishlist: undefined;
+  // ✅ TAMBAH: Routes untuk cart actions
+  AddToCart: { productId: string; fromDeepLink?: boolean };
+  RemoveFromCart: { productId: string; fromDeepLink?: boolean };
 };
 
 // Bottom Tab Navigator Types
@@ -25,9 +33,10 @@ export type BottomTabParamList = {
     fromTab?: string;
     inheritedFromDrawer?: boolean;
   };
+  ProductList: undefined;
   About: undefined;
   Dashboard: undefined;
-  ProfileStack: NavigatorScreenParams<ProfileStackParamList>; // ❌ HAPUS userID dari sini
+  ProfileStack: NavigatorScreenParams<ProfileStackParamList>;
 };
 
 // Home Stack Navigator Types
@@ -41,6 +50,7 @@ export type HomeStackParamList = {
     productId: string;
     productName?: string;
     navigationChain?: any;
+    fromDeepLink?: boolean;
   };
 };
 
@@ -48,13 +58,16 @@ export type HomeStackParamList = {
 export type ProfileStackParamList = {
   Profile: {
     userID?: string;
-    fromDrawer?: boolean; // ✅ TAMBAH
-    timestamp?: string; // ✅ TAMBAH
+    fromDrawer?: boolean;
+    timestamp?: string;
     featureFlags?: {
-      // ✅ TAMBAH (optional)
       enableNewUI?: boolean;
       enableAnalytics?: boolean;
     };
+    redirectToCheckout?: boolean;
+    fromDeepLink?: boolean;
+    deepLinkUserId?: string;
+    validationError?: string;
   };
 };
 
@@ -82,3 +95,95 @@ export interface Product {
   kategori: string;
   diskon?: number;
 }
+
+// User Interface
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  name?: string;
+  gender: string;
+  image: string;
+  token?: string;
+  phone?: string;
+  address?: string;
+  userId?: string;
+}
+
+// Deep Linking Types
+export type DeepLinkParams = {
+  productId?: string;
+  userId?: string;
+};
+
+// Types untuk deep link product handling
+export type ProductDeepLinkResult = {
+  success: boolean;
+  product?: Product;
+  error?: string;
+  isFromDeepLink?: boolean;
+};
+
+// Types untuk profile deep link handling
+export type ProfileDeepLinkResult = {
+  success: boolean;
+  userId?: string;
+  error?: string;
+  isValidFormat?: boolean;
+  userExists?: boolean;
+};
+
+// Enhanced error types untuk deep linking
+export type DeepLinkErrorType = 
+  | 'INVALID_URL' 
+  | 'SCHEME_NOT_SUPPORTED' 
+  | 'ROUTE_NOT_FOUND' 
+  | 'PARAMETER_INVALID'
+  | 'ANDROID_INTENT_FAILED';
+
+export interface DeepLinkError {
+  type: DeepLinkErrorType;
+  message: string;
+  url?: string;
+  timestamp: number;
+}
+
+// ✅ FIXED: Extended Linking Config
+export const linkingConfig: LinkingOptions<RootDrawerParamList> = {
+  prefixes: [
+    'ecommerceapp://',
+    'https://ecommerceapp.com',
+  ],
+  config: {
+    screens: {
+      Home: {
+        screens: {
+          HomeStack: {
+            screens: {
+              Home: 'home',
+              ProductDetail: 'produk/:id',
+            },
+          },
+        },
+      },
+      Checkout: 'keranjang',
+      ProfileStack: {
+        screens: {
+          Profile: 'profil/:userId',
+        },
+      },
+      // ✅ TAMBAH: Cart action routes
+      AddToCart: 'add-to-cart/:productId',
+      RemoveFromCart: 'remove-from-cart/:productId',
+      // Fallback routes
+      About: 'tentang',
+      Dashboard: 'dashboard',
+      Settings: 'pengaturan',
+      ProductList: 'produk',
+      Login: 'login',
+      Wishlist: 'wishlist',
+    },
+  },
+};

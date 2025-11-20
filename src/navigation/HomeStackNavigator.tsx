@@ -27,17 +27,10 @@ export default function HomeStackNavigator() {
           backgroundColor: colors.background,
         },
         
-        // ✅ TAHAP 3: KONFIGURASI GESTURE UNTUK STACK NAVIGATOR
-        // Biarkan gesture enabled untuk back navigation
         gestureEnabled: true,
-        
-        // 🎯 GESTURE DIRECTION: Horizontal untuk natural feel
         gestureDirection: 'horizontal',
+        gestureResponseDistance: 135,
         
-        // 🎯 GESTURE RESPONSE: Optimasi untuk coordination dengan drawer
-        gestureResponseDistance: 135, // 👈 Default distance untuk gesture
-        
-        // 🎯 CARD STYLE INTERPOLATOR: Untuk smooth animation (simplified)
         cardStyleInterpolator: ({ current, layouts }) => {
           return {
             cardStyle: {
@@ -59,21 +52,32 @@ export default function HomeStackNavigator() {
         component={HomeScreen}
         options={{
           title: 'Jelajahi Produk',
-          headerLeft: () => null, // Akan dioverride oleh Drawer navigator
+          headerLeft: () => null,
         }}
       />
       <Stack.Screen 
         name="ProductDetail" 
         component={ProductDetailScreen}
-        options={({ route }) => ({
-          title: route.params?.productName || 'Detail Produk',
-          headerBackTitle: 'Kembali',
-          headerTintColor: colors.textOnPrimary,
+        options={({ route }) => {
+          // Dynamic title berdasarkan nama produk dari deep link
+          const productName = route.params?.productName;
+          const fromDeepLink = route.params?.fromDeepLink;
           
-          // ✅ TAHAP 3: DISABLE GESTURE UNTUK BACK NAVIGATION DI PRODUCT DETAIL
-          // Karena kita ingin prioritaskan drawer lock mode
-          gestureEnabled: false, // 👈 Nonaktifkan gesture back di ProductDetail
-        })}
+          let title = 'Detail Produk';
+          if (productName) {
+            title = productName;
+          } else if (fromDeepLink) {
+            title = 'Memuat Produk...';
+          }
+
+          return {
+            title: title,
+            headerBackTitle: 'Kembali',
+            headerTintColor: colors.textOnPrimary,
+            
+            gestureEnabled: false,
+          };
+        }}
       />
     </Stack.Navigator>
   );

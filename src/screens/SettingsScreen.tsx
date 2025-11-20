@@ -64,51 +64,57 @@ export default function SettingsScreen() {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
 
   useEffect(() => {
-    loadSettings();
-  }, []);
+    let isMounted = true;
 
-  const loadSettings = async () => {
-    try {
-      const storedSettings = await AsyncStorage.getItem(SETTINGS_STORAGE_KEY);
-      if (storedSettings) {
-        setSettings(JSON.parse(storedSettings));
+    const loadSettings = async () => {
+      try {
+        const storedSettings = await AsyncStorage.getItem(SETTINGS_STORAGE_KEY);
+        if (storedSettings && isMounted) {
+          const parsedSettings = JSON.parse(storedSettings);
+          setSettings(parsedSettings);
+        }
+      } catch (error) {
+        console.error('Gagal load settings:', error);
       }
-    } catch (error) {
-      console.error('Gagal load settings:', error);
-    }
-  };
+    };
+
+    loadSettings();
+
+    const intervalId = setInterval(loadSettings, 5000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, []);
 
   const saveSettings = async (newSettings: AppSettings) => {
     try {
       await AsyncStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(newSettings));
       setSettings(newSettings);
+      return true;
     } catch (error) {
       console.error('Gagal save settings:', error);
       Alert.alert('Error', 'Gagal menyimpan pengaturan');
+      return false;
     }
   };
 
-  const handleSettingChange = (key: keyof AppSettings, value: boolean) => {
+  const handleSettingChange = async (key: keyof AppSettings, value: boolean) => {
     const newSettings = { ...settings, [key]: value };
     
     if (key === 'swipeDrawer') {
-      Alert.alert(
-        'Swipe Drawer ' + (value ? 'Diaktifkan' : 'Dinonaktifkan'),
-        value 
-          ? 'Sekarang Anda bisa swipe dari tepi untuk membuka drawer' 
-          : 'Swipe gesture untuk drawer telah dimatikan',
-        [{ text: 'OK' }]
-      );
+      const saved = await saveSettings(newSettings);
+      if (saved) {
+        console.log(`Swipe Drawer ${value ? 'DIHIDUPKAN' : 'DIMATIKAN'}`);
+      }
     } else {
       Alert.alert(
         'Fitur Pajangan 🎨',
         `Fitur "${key}" masih dalam pengembangan!`,
         [{ text: 'Mengerti' }]
       );
-      return;
     }
-    
-    saveSettings(newSettings);
   };
 
   const handleResetSettings = () => {
@@ -120,7 +126,10 @@ export default function SettingsScreen() {
         {
           text: 'Reset',
           style: 'destructive',
-          onPress: () => saveSettings(defaultSettings),
+          onPress: async () => {
+            await saveSettings(defaultSettings);
+            Alert.alert('Sukses', 'Pengaturan telah direset ke default');
+          },
         },
       ]
     );
@@ -130,7 +139,12 @@ export default function SettingsScreen() {
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Pengaturan ⚙️</Text>
-        <Text style={styles.headerSubtitle}>Kelola preferensi aplikasi Anda</Text>
+        <Text style={styles.headerSubtitle}>
+          Swipe Drawer: {settings.swipeDrawer ? '🟢 AKTIF' : '🔴 NONAKTIF'}
+        </Text>
+        <Text style={styles.headerNote}>
+          Perubahan berlaku real-time
+        </Text>
       </View>
 
       <View style={styles.section}>
@@ -139,7 +153,7 @@ export default function SettingsScreen() {
         <SettingItem
           icon="↔️"
           title="Swipe Drawer Gesture"
-          description="Aktifkan swipe dari tepi untuk membuka menu"
+          description={`Swipe dari tepi ${settings.swipeDrawer ? 'AKTIF - Bisa swipe dari edge screen' : 'DIMATIKAN - Hanya bisa lewat menu'}`}
           value={settings.swipeDrawer}
           onValueChange={(value) => handleSettingChange('swipeDrawer', value)}
           isFunctional={true}
@@ -254,6 +268,13 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 14,
     color: 'rgba(255,255,255,0.9)',
+    textAlign: 'center',
+    marginBottom: 4,
+    fontWeight: '600',
+  },
+  headerNote: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
     textAlign: 'center',
   },
   section: {

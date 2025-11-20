@@ -1,6 +1,6 @@
 import React from 'react';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, Text, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { colors } from '../color/colors';
 import {
@@ -9,6 +9,7 @@ import {
   HomeStackParamList,
 } from '../navigation/types';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { useCategories } from '../utils/useCategories';
 
 // Import tab screens
 import PopularTab from './tabs/PopularTab';
@@ -21,7 +22,7 @@ import AutomotiveTab from './tabs/AutomotiveTab';
 import EntertainmentTab from './tabs/EntertainmentTab';
 import BabyTab from './tabs/BabyTab';
 
-// Import dummy data dari file terpisah
+// Import dummy data
 import { dummyProducts } from '../data/dummyProducts';
 
 const Tab = createMaterialTopTabNavigator<HomeTopTabParamList>();
@@ -40,8 +41,24 @@ const createTabWrapper = (
   );
 };
 
+const LoadingScreen: React.FC = () => (
+  <View style={styles.loadingContainer}>
+    <ActivityIndicator size="large" color={colors.primary} />
+    <Text style={styles.loadingText}>Memuat kategori...</Text>
+  </View>
+);
+
+const ErrorScreen: React.FC<{ error: string }> = ({ error }) => (
+  <View style={styles.errorContainer}>
+    <Text style={styles.errorIcon}>⚠️</Text>
+    <Text style={styles.errorTitle}>Gagal Memuat</Text>
+    <Text style={styles.errorMessage}>{error}</Text>
+  </View>
+);
+
 export default function HomeScreen() {
   const navigation = useNavigation<HomeScreenNavigationProp>();
+  const { categories, isLoading, error, isUsingCache } = useCategories();
 
   const handleProductPress = (product: Product) => {
     navigation.navigate('ProductDetail', {
@@ -50,8 +67,27 @@ export default function HomeScreen() {
     });
   };
 
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
+
+  if (error) {
+    return (
+      <ErrorScreen error={error} />
+    );
+  }
+
   return (
     <View style={styles.container}>
+      {/* Cache Indicator */}
+      {isUsingCache && (
+        <View style={styles.cacheIndicator}>
+          <Text style={styles.cacheText}>
+            📦 Menggunakan data cache
+          </Text>
+        </View>
+      )}
+      
       <Tab.Navigator
         screenOptions={{
           tabBarStyle: {
@@ -76,109 +112,100 @@ export default function HomeScreen() {
             paddingHorizontal: 16,
             minHeight: 48,
           },
-          
-          // ✅ TAHAP 3: KONFIGURASI SWIPE UNTUK TOP TABS
-          // Biarkan swipe enabled untuk tab switching
           swipeEnabled: true,
-          
-          // 🎯 LAZY LOADING: Untuk performance
           lazy: true,
-          
-          // 🎯 ANIMATION: Smooth transition
           animationEnabled: true,
-          
-          // ❌ HAPUS: gestureHandlerProps tidak didukung di Material Top Tabs
         }}
       >
-        <Tab.Screen
-          name="Popular"
-          component={createTabWrapper(
-            PopularTab,
-            dummyProducts.popular,
-            handleProductPress,
-          )}
-          options={{ title: 'Populer' }}
-        />
-        <Tab.Screen
-          name="New"
-          component={createTabWrapper(
-            NewTab,
-            dummyProducts.new,
-            handleProductPress,
-          )}
-          options={{ title: 'Terbaru' }}
-        />
-        <Tab.Screen
-          name="Discount"
-          component={createTabWrapper(
-            DiscountTab,
-            dummyProducts.discount,
-            handleProductPress,
-          )}
-          options={{ title: 'Diskon' }}
-        />
-        <Tab.Screen
-          name="Electronics"
-          component={createTabWrapper(
-            ElectronicsTab,
-            dummyProducts.electronics,
-            handleProductPress,
-          )}
-          options={{ title: 'Elektronik' }}
-        />
-        <Tab.Screen
-          name="Clothing"
-          component={createTabWrapper(
-            ClothingTab,
-            dummyProducts.clothing,
-            handleProductPress,
-          )}
-          options={{ title: 'Pakaian' }}
-        />
-        <Tab.Screen
-          name="Food"
-          component={createTabWrapper(
-            FoodTab,
-            dummyProducts.food,
-            handleProductPress,
-          )}
-          options={{ title: 'Makanan' }}
-        />
-        <Tab.Screen
-          name="Automotive"
-          component={createTabWrapper(
-            AutomotiveTab,
-            dummyProducts.automotive,
-            handleProductPress,
-          )}
-          options={{ title: 'Otomotif' }}
-        />
-        <Tab.Screen
-          name="Entertainment"
-          component={createTabWrapper(
-            EntertainmentTab,
-            dummyProducts.entertainment,
-            handleProductPress,
-          )}
-          options={{ title: 'Hiburan' }}
-        />
-        <Tab.Screen
-          name="Baby"
-          component={createTabWrapper(
-            BabyTab,
-            dummyProducts.baby,
-            handleProductPress,
-          )}
-          options={{ title: 'Bayi' }}
-        />
+        {categories.map(category => {
+          const products = dummyProducts[category.id] || [];
+          
+          return (
+            <Tab.Screen
+              key={category.id}
+              name={category.id as keyof HomeTopTabParamList}
+              component={createTabWrapper(
+                getTabComponent(category.id),
+                products,
+                handleProductPress,
+              )}
+              options={{ 
+                title: `${category.icon} ${category.displayName}`
+              }}
+            />
+          );
+        })}
       </Tab.Navigator>
     </View>
   );
 }
 
+// Helper function untuk mendapatkan komponen tab yang sesuai
+const getTabComponent = (categoryId: string) => {
+  const tabComponents: Record<string, React.ComponentType<any>> = {
+    popular: PopularTab,
+    new: NewTab,
+    discount: DiscountTab,
+    electronics: ElectronicsTab,
+    clothing: ClothingTab,
+    food: FoodTab,
+    automotive: AutomotiveTab,
+    entertainment: EntertainmentTab,
+    baby: BabyTab,
+  };
+  
+  return tabComponents[categoryId] || PopularTab;
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: colors.textLight,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    padding: 20,
+  },
+  errorIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  errorMessage: {
+    fontSize: 16,
+    color: colors.textLight,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  cacheIndicator: {
+    backgroundColor: colors.primary + '20',
+    padding: 8,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.primary + '40',
+  },
+  cacheText: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '500',
   },
 });

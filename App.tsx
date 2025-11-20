@@ -1,55 +1,194 @@
 import 'react-native-gesture-handler';
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { NavigationContainer, NavigationState } from '@react-navigation/native';
-import { StatusBar, StyleSheet } from 'react-native';
+import {
+  NavigationContainer,
+  NavigationState,
+} from '@react-navigation/native';
+import {
+  StatusBar,
+  StyleSheet,
+  View,
+  Text,
+  ActivityIndicator,
+  AppState,
+  AppStateStatus,
+} from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import DrawerNavigator from './src/navigation/DrawerNavigator';
 import { colors } from './src/color/colors';
+
 import { CartProvider } from './src/utils/useCart';
+import ErrorBoundary from './src/utils/ErrorBoundary';
+import { NetworkProvider } from './src/context/NetworkContext';
+import NetworkBanner from './src/components/NetworkBanner';
+import { useAppInitialization } from './src/utils/useAppInitialization';
+import { WishlistProvider } from './src/utils/useWishlist';
+import { deepLinkHandler } from './src/utils/deepLinkHandler';
+import { linkingConfig } from './src/navigation/types';
 
 const getActiveRouteName = (state: NavigationState): string => {
   const route = state.routes[state.index];
-
   if (route.state) {
     return getActiveRouteName(route.state as NavigationState);
   }
-
   return route.name;
 };
 
-export default function App() {
-  // ✅ TAMBAH: Di bagian handleNavigationStateChange
+const InitializationLoadingScreen: React.FC = () => (
+  <View style={styles.loadingContainer}>
+    <ActivityIndicator size="large" color={colors.primary} />
+    <Text style={styles.loadingText}>Preparing application...</Text>
+    <Text style={styles.loadingSubtext}>Loading preferences and security</Text>
+  </View>
+);
+
+const ErrorScreen: React.FC<{ error: string; onRetry?: () => void }> = ({
+  error,
+  onRetry,
+}) => (
+  <View style={styles.errorContainer}>
+    <Text style={styles.errorIcon}>⚠️</Text>
+    <Text style={styles.errorTitle}>Failed to Load</Text>
+    <Text style={styles.errorMessage}>{error}</Text>
+    {onRetry && (
+      <View style={styles.retryButtonContainer}>
+        <Text style={styles.retryButton} onPress={onRetry}>
+          Try Again
+        </Text>
+      </View>
+    )}
+  </View>
+);
+
+// BUAT WRAPPER COMPONENT YANG DIDALAM NavigationContainer
+const AppNavigator: React.FC = () => {
+  const { data: initData } = useAppInitialization();
+  const isLoggedIn = initData?.isAuthenticated || false;
+  
+  const navigationRef = React.useRef<any>(null);
+  const routeNameRef = React.useRef<string>('');
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+
+  // Process pending deep link actions when app becomes active
+  useEffect(() => {
+    const processPendingActions = () => {
+      const pendingActions = deepLinkHandler.getPendingActions();
+      
+      if (pendingActions.length > 0 && isLoggedIn) {
+        console.log(`🔄 App: Processing ${pendingActions.length} pending deep link actions`);
+        
+        pendingActions.forEach((action: any) => {
+          if (action.type === 'ADD_TO_CART' && action.productId) {
+            console.log('📦 App: Processing add-to-cart deep link:', action.productId);
+            navigationRef.current?.navigate('AddToCart', {
+              productId: action.productId,
+              fromDeepLink: true
+            });
+          }
+          deepLinkHandler.removePendingAction(action.timestamp);
+        });
+      } else if (pendingActions.length > 0 && !isLoggedIn) {
+        console.log('🚫 App: Blocking deep links - user not logged in');
+        deepLinkHandler.clearPendingActions();
+      }
+    };
+
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (appStateRef.current === 'background' && nextAppState === 'active') {
+        console.log('📱 App: Returning to foreground, processing pending actions');
+        processPendingActions();
+      }
+      appStateRef.current = nextAppState;
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    processPendingActions();
+
+    return () => {
+      subscription.remove();
+    };
+  }, [isLoggedIn]);
+
   const handleNavigationStateChange = (state: NavigationState | undefined) => {
     if (state) {
       const currentRouteName = getActiveRouteName(state);
+      routeNameRef.current = currentRouteName;
 
-      // 🎯 TAHAP 4: ENHANCED ANALYTICS TRACKING
-      console.log(`[ANALYTICS] Route Visited: ${currentRouteName}`);
-      console.log(`[ANALYTICS] Timestamp: ${new Date().toISOString()}`);
-      console.log(`[ANALYTICS] User Session: Active`);
-
-      // Enhanced tracking dengan lebih detail
-      if (currentRouteName.includes('ProductDetail')) {
-        console.log(
-          '[ANALYTICS] Product Detail View - Tracking product engagement',
-        );
-      } else if (currentRouteName.includes('Checkout')) {
-        console.log('[ANALYTICS] Checkout Screen - Tracking conversion funnel');
-      } else if (currentRouteName === 'Home') {
-        console.log('[ANALYTICS] Home Screen - Main entry point tracking');
-      } else if (currentRouteName.includes('Profile')) {
-        console.log('[ANALYTICS] Profile Screen - User activity tracking');
-      } else if (currentRouteName.includes('Popular')) {
-        console.log('[ANALYTICS] Popular Tab - High engagement content');
+      if (currentRouteName === 'ProductDetail') {
+        console.log('🔗 App: Product Detail screen activated via deep link');
+      } else if (currentRouteName === 'Checkout') {
+        console.log('🔗 App: Checkout screen activated via deep link');
+      } else if (currentRouteName === 'AddToCart') {
+        console.log('🔗 App: AddToCart screen activated via deep link');
       }
-
-      // Track navigation depth
-      const navigationDepth = state.routes.length;
-      console.log(`[ANALYTICS] Navigation Depth: ${navigationDepth}`);
     }
   };
 
+  return (
+    <NavigationContainer
+      ref={navigationRef}
+      linking={linkingConfig}
+      onStateChange={handleNavigationStateChange}
+      onReady={() => {
+        const currentRoute = navigationRef.current?.getCurrentRoute();
+        routeNameRef.current = currentRoute?.name || '';
+        console.log('🚀 App: Navigation Container Ready');
+        
+        const pendingActions = deepLinkHandler.getPendingActions();
+        if (pendingActions.length > 0) {
+          console.log(`📥 App: ${pendingActions.length} pending deep links detected`);
+        }
+      }}
+      fallback={
+        <View style={styles.fallbackContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.fallbackText}>Loading navigation...</Text>
+        </View>
+      }
+    >
+      <DrawerNavigator />
+    </NavigationContainer>
+  );
+};
+
+const AppContent: React.FC = () => {
+  const {
+    isLoading: appInitLoading,
+    error: initError,
+    initializeApp,
+  } = useAppInitialization();
+
+  const handleRetryInitialization = React.useCallback(() => {
+    console.log('🔄 App: Retrying initialization...');
+    initializeApp();
+  }, [initializeApp]);
+
+  if (appInitLoading) {
+    return <InitializationLoadingScreen />;
+  }
+
+  if (initError) {
+    return (
+      <ErrorScreen error={initError} onRetry={handleRetryInitialization} />
+    );
+  }
+
+  return (
+    <NetworkProvider>
+      <CartProvider>
+        <WishlistProvider>
+          <ErrorBoundary>
+            <NetworkBanner />
+            <AppNavigator />
+          </ErrorBoundary>
+        </WishlistProvider>
+      </CartProvider>
+    </NetworkProvider>
+  );
+};
+
+export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar
@@ -59,11 +198,7 @@ export default function App() {
       />
       <GestureHandlerRootView style={styles.gestureRoot}>
         <SafeAreaView style={styles.safeArea}>
-          <CartProvider>
-            <NavigationContainer onStateChange={handleNavigationStateChange}>
-              <DrawerNavigator />
-            </NavigationContainer>
-          </CartProvider>
+          <AppContent />
         </SafeAreaView>
       </GestureHandlerRootView>
     </SafeAreaProvider>
@@ -76,5 +211,71 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: colors.textLight,
+    marginBottom: 8,
+  },
+  loadingSubtext: {
+    fontSize: 14,
+    color: colors.textLight,
+    textAlign: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    padding: 20,
+  },
+  errorIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  errorMessage: {
+    fontSize: 16,
+    color: colors.textLight,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  retryButtonContainer: {
+    marginTop: 16,
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    color: colors.textOnPrimary,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  fallbackContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+  },
+  fallbackText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: colors.textLight,
   },
 });

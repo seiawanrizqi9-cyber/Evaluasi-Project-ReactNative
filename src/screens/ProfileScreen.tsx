@@ -1,348 +1,504 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
   ScrollView,
-  KeyboardAvoidingView,
-  Platform,
+  TouchableOpacity,
+  Alert,
+  RefreshControl,
+  StyleSheet,
+  Image,
 } from 'react-native';
 import { colors } from '../color/colors';
 import { useAuth } from '../utils/useAuth';
-import AuthGuard from '../components/AuthGuard';
-import { User } from '../utils/useAuth';
-import FontAwesome6 from 'react-native-vector-icons/FontAwesome6';
-import { useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import { ProfileStackParamList } from '../navigation/types';
+import FontAwesome6 from 'react-native-vector-icons/FontAwesome6';
 
-// ✅ PERBAIKAN: Type untuk route params
-type ProfileScreenRouteProp = RouteProp<ProfileStackParamList, 'Profile'>;
+type ProfileScreenNavigationProp = StackNavigationProp<ProfileStackParamList, 'Profile'>;
 
-// KOMPONEN FORM LOGIN
-const LoginForm: React.FC<{
-  onLogin: (email: string, password: string, name: string) => void;
-  isLoading?: boolean;
-}> = ({ onLogin, isLoading = false }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
+const LoginPrompt: React.FC<{ onLoginPress: () => void }> = ({ onLoginPress }) => (
+  <View style={styles.loginPromptContainer}>
+    <View style={styles.avatar}>
+      <FontAwesome6 name="circle-user" size={60} color={colors.textLight} />
+    </View>
+    <Text style={styles.loginTitle}>Not Logged In</Text>
+    <Text style={styles.loginSubtitle}>
+      Login to access your profile and full features
+    </Text>
+    <TouchableOpacity style={styles.loginButton} onPress={onLoginPress}>
+      <Text style={styles.loginButtonText}>🚪 Login to Account</Text>
+    </TouchableOpacity>
+  </View>
+);
 
-  const useDemoAccount = () => {
-    setName('John Doe');
-    setEmail('demo@belanja-skuy.com');
-    setPassword('demo123');
-    Alert.alert('Akun Demo', 'Form telah diisi dengan akun demo!');
-  };
-
-  const handleSubmit = () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Email dan password harus diisi');
-      return;
-    }
-
-    if (!email.includes('@')) {
-      Alert.alert('Error', 'Format email tidak valid');
-      return;
-    }
-
-    onLogin(email, password, name);
-  };
-
-  return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Profil 👤</Text>
-          <Text style={styles.headerSubtitle}>
-            Masuk untuk mengakses profil Anda
-          </Text>
-        </View>
-
-        <View style={styles.loginCard}>
-          <View style={styles.avatarContainer}>
-            <View style={styles.avatar}>
-              <FontAwesome6 name="circle-user" size={50} color={'#ffffffff'} />
-            </View>
-          </View>
-
-          <Text style={styles.loginTitle}>Masuk ke Akun Anda</Text>
-          <Text style={styles.loginSubtitle}>
-            Akses semua fitur Belanja Skuy
-          </Text>
-
-          <TextInput
-            style={styles.input}
-            placeholder="Nama Lengkap (Opsional)"
-            value={name}
-            onChangeText={setName}
-            placeholderTextColor={colors.textLight}
-            autoCapitalize="words"
-          />
-
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            placeholderTextColor={colors.textLight}
-            autoComplete="email"
-          />
-
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            placeholderTextColor={colors.textLight}
-            autoComplete="password"
-          />
-
-          <TouchableOpacity
-            style={[
-              styles.loginButton,
-              isLoading && styles.loginButtonDisabled,
-            ]}
-            onPress={handleSubmit}
-            disabled={isLoading}
-          >
-            <Text style={styles.loginButtonText}>
-              {isLoading ? 'Memproses...' : 'Masuk / Daftar'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.demoButton} onPress={useDemoAccount}>
-            <Text style={styles.demoButtonText}>🚀 Pakai Akun Demo</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.loginNote}>
-            Dengan masuk, Anda menyetujui Syarat & Ketentuan kami
-          </Text>
-
-          <View style={styles.demoInfo}>
-            <Text style={styles.demoInfoTitle}>Info Akun Demo:</Text>
-            <Text style={styles.demoInfoText}>Nama: John Doe (opsional)</Text>
-            <Text style={styles.demoInfoText}>
-              Email: demo@belanja-skuy.com
-            </Text>
-            <Text style={styles.demoInfoText}>Password: demo123</Text>
-          </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
-};
-
-// KOMPONEN PROFIL SETELAH LOGIN - DENGAN PARAMS
 const ProfileContent: React.FC<{
-  user: User | null;
-  onLogout: () => void;
+  user: any;
+  onLogout: () => Promise<{success: boolean; message: string}>;
   onEditProfile: () => void;
-}> = ({ user, onLogout, onEditProfile }) => {
-  const route = useRoute<ProfileScreenRouteProp>();
-  const { userID, fromDrawer, timestamp } = route.params || {};
+  onRefresh: () => void;
+  refreshing: boolean;
+  fromDeepLink?: boolean;
+  deepLinkUserId?: string;
+  validationError?: string;
+}> = ({ 
+  user, 
+  onLogout, 
+  onEditProfile, 
+  onRefresh, 
+  refreshing, 
+  fromDeepLink,
+  deepLinkUserId,
+  validationError 
+}) => {
+  const navigation = useNavigation<ProfileScreenNavigationProp>();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  React.useEffect(() => {
-    console.log('📊 ProfileScreen Parameters:', {
-      userID,
-      fromDrawer,
-      timestamp,
-      hasUser: !!user,
-      userEmail: user?.email,
-    });
-  }, [userID, fromDrawer, timestamp, user]);
+  const userStats = {
+    orders: user?.orders || 15,
+    favorites: user?.favorites || 8,
+    discounts: user?.discounts || 12,
+    memberSince: user?.memberSince || new Date().getFullYear() - 2,
+  };
+
+  const handleLogoutWithConfirmation = useCallback(() => {
+    Alert.alert(
+      'Logout Confirmation',
+      'Are you sure you want to logout? This will:\n\n• Clear your cart and wishlist\n• Remove your personal data\n• Require login to access protected features',
+      [
+        { 
+          text: 'Cancel', 
+          style: 'cancel' 
+        },
+        {
+          text: 'Logout Now',
+          style: 'destructive',
+          onPress: async () => {
+            setIsLoggingOut(true);
+            try {
+              const result = await onLogout();
+              if (!result.success) {
+                Alert.alert('Logout Warning', result.message);
+              }
+            } catch (error) {
+              Alert.alert('Logout Error', 'An unexpected error occurred during logout');
+            } finally {
+              setIsLoggingOut(false);
+            }
+          }
+        },
+      ],
+      { cancelable: true }
+    );
+  }, [onLogout]);
+
+  // Tampilkan error jika ada validasi error dari deep link
+  if (validationError) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorIcon}>❌</Text>
+          <Text style={styles.errorTitle}>Profile Not Found</Text>
+          <Text style={styles.errorMessage}>
+            {validationError}
+          </Text>
+          {deepLinkUserId && (
+            <Text style={styles.userIdText}>ID: {deepLinkUserId}</Text>
+          )}
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => {
+              const parent = navigation.getParent();
+              if (parent) {
+                (parent as any).navigate('Home');
+              }
+            }}
+          >
+            <Text style={styles.backButtonText}>Back to Home</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView 
+      style={styles.container} 
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[colors.primary]}
+          tintColor={colors.primary}
+        />
+      }
+    >
+      {fromDeepLink && (
+        <View style={styles.deepLinkIndicator}>
+          <Text style={styles.deepLinkText}>🔗 Opened from Deep Link</Text>
+          {deepLinkUserId && (
+            <Text style={styles.deepLinkUserId}>User ID: {deepLinkUserId}</Text>
+          )}
+        </View>
+      )}
+
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Profil 👤</Text>
-        <Text style={styles.headerSubtitle}>Kelola informasi akun Anda</Text>
+        <Text style={styles.headerTitle}>Profile 👤</Text>
+        <Text style={styles.headerSubtitle}>Manage your account information</Text>
       </View>
 
       <View style={styles.profileCard}>
         <View style={styles.avatarContainer}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {user?.name?.charAt(0).toUpperCase() || 'U'}
-            </Text>
-          </View>
-          <Text style={styles.userName}>{user?.name || 'User'}</Text>
-          <Text style={styles.userEmail}>{user?.email}</Text>
-
-          {/* ✅ TAMPILKAN USERID DARI PARAMS */}
-          {userID && (
-            <View style={styles.userIdBadge}>
-              <Text style={styles.userIdText}>ID: {userID}</Text>
-              {fromDrawer && (
-                <Text style={styles.userIdSubtext}>(Dari Drawer)</Text>
-              )}
+          {user?.image ? (
+            <Image source={{ uri: user.image }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {user?.firstName?.charAt(0).toUpperCase() || 
+                 user?.username?.charAt(0).toUpperCase() || 
+                 'U'}
+              </Text>
             </View>
+          )}
+          <Text style={styles.userName}>
+            {user?.firstName && user?.lastName 
+              ? `${user.firstName} ${user.lastName}`
+              : user?.username || 'User'
+            }
+          </Text>
+          <Text style={styles.userEmail}>{user?.email || 'No email provided'}</Text>
+          <Text style={styles.userUsername}>@{user?.username || 'username'}</Text>
+          
+          {fromDeepLink && deepLinkUserId && (
+            <Text style={styles.deepLinkUserInfo}>
+              🔗 Accessed from: {deepLinkUserId}
+            </Text>
+          )}
+          {refreshing && (
+            <Text style={styles.refreshingText}>Updating data...</Text>
           )}
         </View>
 
-        <Text style={styles.sectionTitleCenter}>Informasi Profil</Text>
+        <Text style={styles.sectionTitle}>Profile Information</Text>
 
         <View style={styles.infoSection}>
           <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Nama Lengkap</Text>
-            <Text style={styles.infoValue}>{user?.name || 'Belum diatur'}</Text>
+            <Text style={styles.infoLabel}>Full Name</Text>
+            <Text style={styles.infoValue}>
+              {user?.firstName && user?.lastName 
+                ? `${user.firstName} ${user.lastName}`
+                : user?.username || 'Not set'
+              }
+            </Text>
+          </View>
+
+          <View style={styles.infoItem}>
+            <Text style={styles.infoLabel}>Username</Text>
+            <Text style={styles.infoValue}>@{user?.username || 'Not set'}</Text>
           </View>
 
           <View style={styles.infoItem}>
             <Text style={styles.infoLabel}>Email</Text>
-            <Text style={styles.infoValue}>{user?.email}</Text>
+            <Text style={styles.infoValue}>{user?.email || 'Not provided'}</Text>
           </View>
 
           <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Telepon</Text>
+            <Text style={styles.infoLabel}>Gender</Text>
             <Text style={styles.infoValue}>
-              {user?.phone || 'Belum diatur'}
+              {user?.gender ? user.gender.charAt(0).toUpperCase() + user.gender.slice(1) : 'Not specified'}
             </Text>
           </View>
 
           <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Alamat</Text>
+            <Text style={styles.infoLabel}>User ID</Text>
             <Text style={styles.infoValue}>
-              {user?.address || 'Belum diatur'}
+              #{user?.id || 'Unknown'}
             </Text>
           </View>
-
-          {/* ✅ TAMBAH INFO PARAMETER DARI NAVIGATION */}
-          {userID && (
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>User ID System</Text>
-              <Text style={[styles.infoValue, styles.userIdHighlight]}>
-                {userID}
-              </Text>
-            </View>
-          )}
-
-          {timestamp && (
-            <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>Data Loaded</Text>
-              <Text style={styles.infoValue}>
-                {new Date(timestamp).toLocaleTimeString()}
-              </Text>
-            </View>
-          )}
         </View>
 
         <View style={styles.actionButtons}>
           <TouchableOpacity style={styles.editButton} onPress={onEditProfile}>
-            <Text style={styles.editButtonText}>✏️ Edit Profil</Text>
+            <Text style={styles.editButtonText}>✏️ Edit Profile</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
-            <Text style={styles.logoutButtonText}>🚪 Keluar</Text>
+          <TouchableOpacity 
+            style={[styles.logoutButton, isLoggingOut && styles.logoutButtonDisabled]} 
+            onPress={handleLogoutWithConfirmation}
+            disabled={isLoggingOut}
+          >
+            {isLoggingOut ? (
+              <Text style={styles.logoutButtonText}>🔄 Logging Out...</Text>
+            ) : (
+              <Text style={styles.logoutButtonText}>🚪 Logout</Text>
+            )}
           </TouchableOpacity>
         </View>
 
-        {/* Stats */}
         <View style={styles.statsSection}>
-          <Text style={styles.statsTitle}>Aktivitas Anda</Text>
+          <Text style={styles.statsTitle}>Your Activity</Text>
           <View style={styles.statsGrid}>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>15</Text>
-              <Text style={styles.statLabel}>Pesanan</Text>
+              <Text style={styles.statNumber}>{userStats.orders}</Text>
+              <Text style={styles.statLabel}>Orders</Text>
             </View>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>8</Text>
-              <Text style={styles.statLabel}>Favorit</Text>
+              <Text style={styles.statNumber}>{userStats.favorites}</Text>
+              <Text style={styles.statLabel}>Favorites</Text>
             </View>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>12</Text>
-              <Text style={styles.statLabel}>Diskon</Text>
+              <Text style={styles.statNumber}>{userStats.discounts}</Text>
+              <Text style={styles.statLabel}>Discounts</Text>
             </View>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>2</Text>
-              <Text style={styles.statLabel}>Tahun</Text>
+              <Text style={styles.statNumber}>{userStats.memberSince}</Text>
+              <Text style={styles.statLabel}>Years</Text>
             </View>
           </View>
+        </View>
+
+        <View style={styles.additionalInfo}>
+          <Text style={styles.additionalInfoTitle}>Account Status</Text>
+          <View style={styles.statusBadge}>
+            <Text style={styles.statusText}>✅ Active</Text>
+          </View>
+          <Text style={styles.memberSince}>
+            Member since: {userStats.memberSince}
+          </Text>
         </View>
       </View>
     </ScrollView>
   );
 };
 
-// KOMPONEN UTAMA
 export default function ProfileScreen() {
-  const { isLoggedIn, user, login, logout } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
+  const { 
+    isLoggedIn, 
+    user, 
+    logout, 
+    loadAuthData, 
+    validateUserId,
+    getUserById 
+  } = useAuth();
+  const navigation = useNavigation<ProfileScreenNavigationProp>();
+  const route = useRoute();
+  const [refreshing, setRefreshing] = useState(false);
+  const [shouldRedirectToCheckout, setShouldRedirectToCheckout] = useState(false);
+  const [deepLinkParams, setDeepLinkParams] = useState<{
+    fromDeepLink?: boolean;
+    deepLinkUserId?: string;
+    validationError?: string;
+  }>({});
 
-  const handleLogin = async (email: string, password: string, name: string) => {
-    setIsLoading(true);
-    try {
-      const userData: User = {
-        name: name || email.split('@')[0],
-        email,
-        phone: '',
-        address: '',
-      };
-      await login(userData);
-      Alert.alert('Sukses', 'Login berhasil! 🎉');
-    } catch (error) {
-      Alert.alert('Error', 'Gagal login, coba lagi nanti');
-    } finally {
-      setIsLoading(false);
+  // Handle deep link parameters
+  useEffect(() => {
+    const params = route.params as any;
+    
+    if (params?.fromDeepLink && params?.deepLinkUserId) {
+      console.log('ProfileScreen - Deep link detected:', params.deepLinkUserId);
+      
+      // Validasi userId dari deep link
+      const validationResult = validateUserId(params.deepLinkUserId);
+      
+      if (validationResult.success && validationResult.userId) {
+        // User valid, load user data
+        const userData = getUserById(validationResult.userId);
+        if (userData) {
+          console.log('User data loaded from deep link:', userData);
+          setDeepLinkParams({
+            fromDeepLink: true,
+            deepLinkUserId: validationResult.userId
+          });
+        }
+      } else {
+        // User tidak valid, tampilkan error
+        setDeepLinkParams({
+          fromDeepLink: true,
+          deepLinkUserId: params.deepLinkUserId,
+          validationError: validationResult.error
+        });
+      }
+    } else {
+      // Reset deep link params jika bukan dari deep link
+      setDeepLinkParams({});
     }
-  };
+  }, [route.params, validateUserId, getUserById]);
 
-  const handleLogout = async () => {
-    Alert.alert('Konfirmasi Keluar', 'Apakah Anda yakin ingin keluar?', [
-      { text: 'Batal', style: 'cancel' },
-      {
-        text: 'Keluar',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await logout();
-            Alert.alert('Sukses', 'Anda telah berhasil keluar');
-          } catch (error) {
-            Alert.alert('Error', 'Gagal keluar, coba lagi');
-          }
-        },
-      },
-    ]);
-  };
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    console.log('🔄 Manual refresh profile data');
+    await loadAuthData();
+    setRefreshing(false);
+  }, [loadAuthData]);
 
-  const handleEditProfile = () => {
-    Alert.alert('Info', 'Fitur edit profil akan segera hadir!');
-  };
+  const handleLoginPress = useCallback(() => {
+    setShouldRedirectToCheckout(true);
+    
+    const parent = navigation.getParent();
+    if (parent) {
+      (parent as any).navigate('Login');
+    } else {
+      Alert.alert('Error', 'Cannot open login page');
+    }
+  }, [navigation]);
+
+  const handleEditProfile = useCallback(() => {
+    Alert.alert('Coming Soon', 'Edit profile feature will be available soon!');
+  }, []);
+
+  useEffect(() => {
+    console.log('👤 ProfileScreen State:', {
+      isLoggedIn,
+      user: user ? `${user.firstName} ${user.lastName} (${user.username})` : 'null',
+      refreshing,
+      shouldRedirectToCheckout,
+      deepLinkParams
+    });
+  }, [isLoggedIn, user, refreshing, shouldRedirectToCheckout, deepLinkParams]);
 
   if (!isLoggedIn) {
     return (
-      <AuthGuard isAuthenticated={false}>
-        <LoginForm onLogin={handleLogin} isLoading={isLoading} />
-      </AuthGuard>
+      <View style={styles.container}>
+        <LoginPrompt onLoginPress={handleLoginPress} />
+      </View>
     );
   }
 
   return (
     <ProfileContent
       user={user}
-      onLogout={handleLogout}
+      onLogout={logout}
       onEditProfile={handleEditProfile}
+      onRefresh={handleRefresh}
+      refreshing={refreshing}
+      fromDeepLink={deepLinkParams.fromDeepLink}
+      deepLinkUserId={deepLinkParams.deepLinkUserId}
+      validationError={deepLinkParams.validationError}
     />
   );
 }
 
-// STYLES
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.backgroundAlt,
   },
-  scrollContainer: {
-    flexGrow: 1,
-    paddingBottom: 20,
+  deepLinkIndicator: {
+    backgroundColor: colors.primary + '20',
+    padding: 12,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.primary + '40',
+  },
+  deepLinkText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  deepLinkUserId: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  deepLinkUserInfo: {
+    fontSize: 12,
+    color: colors.primary,
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.error,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: 16,
+    color: colors.textLight,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  userIdText: {
+    fontSize: 14,
+    color: colors.textLight,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  backButton: {
+    backgroundColor: colors.primary,
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  backButtonText: {
+    color: colors.textOnPrimary,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  loginPromptContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: colors.borderLight,
+  },
+  avatarImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    marginBottom: 20,
+  },
+  loginTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  loginSubtitle: {
+    fontSize: 16,
+    color: colors.textLight,
+    textAlign: 'center',
+    marginBottom: 30,
+    lineHeight: 22,
+  },
+  loginButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    minWidth: 200,
+    alignItems: 'center',
+  },
+  loginButtonText: {
+    color: colors.textOnPrimary,
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   header: {
     backgroundColor: colors.primary,
@@ -363,144 +519,26 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.9)',
     textAlign: 'center',
   },
-  avatarContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  avatarText: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: colors.textOnPrimary,
-  },
-  userIdBadge: {
-    backgroundColor: colors.primary + '20',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.primary + '40',
-    marginTop: 8,
-    alignItems: 'center',
-  },
-  userIdText: {
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: 'bold',
-  },
-  userIdSubtext: {
-    fontSize: 10,
-    color: colors.textLight,
-    marginTop: 2,
-  },
-  loginCard: {
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    padding: 24,
-    margin: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    backgroundColor: colors.background,
-    color: colors.text,
-    marginBottom: 16,
-  },
-  loginButton: {
-    backgroundColor: colors.primary,
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 12,
-  },
-  loginButtonDisabled: {
-    backgroundColor: colors.textLight,
-    opacity: 0.6,
-  },
-  loginButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  demoButton: {
-    backgroundColor: colors.accent,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: colors.accent + '40',
-  },
-  demoButtonText: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  demoInfo: {
-    backgroundColor: colors.background,
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    marginTop: 8,
-  },
-  demoInfoTitle: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  demoInfoText: {
-    fontSize: 11,
-    color: colors.textLight,
-    marginBottom: 2,
-  },
-  loginTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.primary,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  loginSubtitle: {
-    fontSize: 14,
-    color: colors.textLight,
-    marginBottom: 30,
-    textAlign: 'center',
-  },
-  loginNote: {
-    fontSize: 12,
-    color: colors.textLight,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
   profileCard: {
     backgroundColor: colors.card,
     borderRadius: 20,
     padding: 24,
     margin: 16,
+    marginTop: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 5,
+  },
+  avatarContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  avatarText: {
+    fontSize: 40,
+    fontWeight: 'bold',
+    color: '#4b4b4bff',
   },
   userName: {
     fontSize: 20,
@@ -511,12 +549,24 @@ const styles = StyleSheet.create({
   userEmail: {
     fontSize: 14,
     color: colors.textLight,
+    marginBottom: 2,
   },
-  sectionTitleCenter: {
-    fontSize: 20,
+  userUsername: {
+    fontSize: 16,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  refreshingText: {
+    fontSize: 12,
+    color: colors.primary,
+    fontStyle: 'italic',
+    marginTop: 8,
+  },
+  sectionTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: colors.primary,
-    marginBottom: 20,
+    marginBottom: 16,
     textAlign: 'center',
   },
   infoSection: {
@@ -539,14 +589,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text,
     fontWeight: '600',
-  },
-  userIdHighlight: {
-    color: colors.primary,
-    fontWeight: 'bold',
-    backgroundColor: colors.primary + '15',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
   },
   actionButtons: {
     gap: 12,
@@ -571,6 +613,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.error + '30',
   },
+  logoutButtonDisabled: {
+    opacity: 0.6,
+  },
   logoutButtonText: {
     color: colors.error,
     fontSize: 16,
@@ -580,6 +625,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
     paddingTop: 20,
+    marginBottom: 20,
   },
   statsTitle: {
     fontSize: 18,
@@ -606,5 +652,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textLight,
     textAlign: 'center',
+  },
+  additionalInfo: {
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+    paddingTop: 20,
+    alignItems: 'center',
+  },
+  additionalInfoTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  statusBadge: {
+    backgroundColor: colors.success + '20',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.success + '40',
+    marginBottom: 8,
+  },
+  statusText: {
+    color: colors.success,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  memberSince: {
+    fontSize: 12,
+    color: colors.textLight,
   },
 });
