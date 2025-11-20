@@ -1,85 +1,425 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation } from '@react-navigation/native';
+import ApiKeyManager from './api/apiKeyManager';
+import apiClient, { API_ENDPOINTS } from './api/apiClient';
+import { ProfileDeepLinkResult } from '../navigation/types';
 
 const USER_STORAGE_KEY = '@user_profile';
 const IS_LOGGED_IN_KEY = '@is_logged_in';
+const USER_PREFERENCES_KEY = '@user_preferences';
 
 export interface User {
-  name: string;
+  id: number;
+  username: string;
   email: string;
-  phone?: string;
-  address?: string;
+  firstName: string;
+  lastName: string;
+  gender: string;
+  image: string;
+  token?: string;
+}
+
+interface AuthState {
+  isLoggedIn: boolean;
+  user: User | null;
+  token: string | null;
+  isLoading: boolean;
+  securityError: string | null;
+  isLoggingOut: boolean;
 }
 
 export const useAuth = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-  const [user, setUser] = useState<User | null>(null);
+  const [authState, setAuthState] = useState<AuthState>({
+    isLoggedIn: false,
+    user: null,
+    token: null,
+    isLoading: true,
+    securityError: null,
+    isLoggingOut: false,
+  });
+
+  const navigation = useNavigation();
+
+  const clearAllUserData = useCallback(async (): Promise<{success: boolean; errors: string[]}> => {
+    const errors: string[] = [];
+    
+    try {
+      console.log('🧹 Starting data cleanup...');
+
+      // Delete secure token
+      const tokenResult = await ApiKeyManager.deleteUserToken();
+      if (!tokenResult.success) {
+        errors.push(`Token deletion failed: ${tokenResult.error}`);
+      }
+
+      // Delete AsyncStorage data
+      const storageKeys = [
+        USER_STORAGE_KEY,
+        IS_LOGGED_IN_KEY,
+        USER_PREFERENCES_KEY,
+        '@cart_items',
+        '@wishlist_ids',
+        '@wishlist_meta',
+        '@token_expired_at'
+      ];
+
+      try {
+        await AsyncStorage.multiRemove(storageKeys);
+        console.log(`✅ Deleted ${storageKeys.length} storage keys`);
+      } catch (storageError: any) {
+        errors.push(`Storage cleanup failed: ${storageError.message}`);
+        // Fallback individual deletion
+        for (const key of storageKeys) {
+          try {
+            await AsyncStorage.removeItem(key);
+          } catch (e) {
+            // Continue silently
+          }
+        }
+      }
+
+      return {
+        success: errors.length === 0,
+        errors
+      };
+
+    } catch (error: any) {
+      console.error('❌ Data cleanup failed:', error);
+      errors.push(`Logout process failed: ${error.message}`);
+      return { success: false, errors };
+    }
+  }, []);
+
+  const resetNavigationToLogin = useCallback(() => {
+    try {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' as never }],
+      });
+    } catch (navError) {
+      console.error('❌ Navigation reset failed:', navError);
+    }
+  }, [navigation]);
+
+  const logout = useCallback(async (): Promise<{success: boolean; message: string}> => {
+    try {
+      setAuthState(prev => ({ ...prev, isLoggingOut: true }));
+
+      const cleanupResult = await clearAllUserData();
+      
+      // Reset state regardless of cleanup result
+      setAuthState({
+        isLoggedIn: false,
+        user: null,
+        token: null,
+        isLoading: false,
+        securityError: null,
+        isLoggingOut: false,
+      });
+
+      resetNavigationToLogin();
+
+      return {
+        success: true,
+        message: cleanupResult.errors.length > 0 
+          ? `Logout completed with ${cleanupResult.errors.length} warning(s)` 
+          : 'Logout successful'
+      };
+
+    } catch (error: any) {
+      console.error('❌ Logout error:', error);
+      
+      // Force reset state
+      setAuthState({
+        isLoggedIn: false,
+        user: null,
+        token: null,
+        isLoading: false,
+        securityError: 'Logout failed. Please try again.',
+        isLoggingOut: false,
+      });
+
+      resetNavigationToLogin();
+
+      return {
+        success: false,
+        message: error.message || 'Logout failed'
+      };
+    }
+  }, [clearAllUserData, resetNavigationToLogin]);
+
+  const login = useCallback(async (username: string, password: string) => {
+    try {
+      setAuthState(prev => ({ ...prev, isLoading: true, securityError: null }));
+
+      console.log('🔐 Attempting login with username:', username);
+      
+      // DEBUG: Log the API endpoint and request
+      console.log('🌐 API Endpoint:', API_ENDPOINTS.AUTH.LOGIN);
+      console.log('📤 Request payload:', { username: username.trim(), password: password.trim() });
+
+      // Make the login request with timeout
+      const response = await apiClient.post(API_ENDPOINTS.AUTH.LOGIN, {
+        username: username.trim(),
+        password: password.trim(),
+      });
+
+      console.log('✅ Login response status:', response.status);
+      console.log('📥 Login response data:', response.data);
+
+      // Check if we have the expected response
+      if (!response.data) {
+        throw new Error('No response data received from server');
+      }
+
+      // DummyJSON returns accessToken, not token
+      const { accessToken, ...userData } = response.data;
+
+      console.log('🔑 AccessToken received:', !!accessToken);
+      console.log('👤 User data received:', userData);
+
+      if (!accessToken) {
+        console.error('❌ No accessToken in response:', response.data);
+        throw new Error('No authentication token received from server. Please check your credentials.');
+      }
+
+      // Save token
+      await ApiKeyManager.saveUserToken(accessToken, 24 * 60 * 60 * 1000);
+      
+      // Create user object with token for compatibility
+      const userWithToken = {
+        ...userData,
+        token: accessToken
+      };
+
+      // Save user data
+      await AsyncStorage.multiSet([
+        [USER_STORAGE_KEY, JSON.stringify(userWithToken)],
+        [IS_LOGGED_IN_KEY, 'true'],
+      ]);
+
+      setAuthState({
+        isLoggedIn: true,
+        user: userWithToken,
+        token: accessToken,
+        isLoading: false,
+        securityError: null,
+        isLoggingOut: false,
+      });
+
+      console.log('🎉 Login successful for user:', userData.username);
+      return { user: userWithToken, token: accessToken };
+
+    } catch (error: any) {
+      console.error('❌ Login error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        code: error.code
+      });
+      
+      let errorMessage = 'Login failed. Please try again.';
+      
+      // Handle specific error cases
+      if (error.response) {
+        // Server responded with error status
+        const status = error.response.status;
+        const data = error.response.data;
+        
+        console.log('🔍 Error response details:', { status, data });
+        
+        if (status === 400) {
+          errorMessage = data?.message || 'Invalid username or password';
+        } else if (status === 404) {
+          errorMessage = 'Authentication service not found';
+        } else if (status === 500) {
+          errorMessage = 'Server error. Please try again later.';
+        } else if (status === 429) {
+          errorMessage = 'Too many login attempts. Please wait and try again.';
+        } else {
+          errorMessage = data?.message || `Server error (${status})`;
+        }
+      } else if (error.request) {
+        // Request was made but no response received
+        console.log('📡 No response received - network issue');
+        errorMessage = 'Network error. Please check your internet connection.';
+      } else if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Request timeout. Please try again.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setAuthState(prev => ({ 
+        ...prev, 
+        isLoading: false,
+        securityError: errorMessage
+      }));
+      
+      throw new Error(errorMessage);
+    }
+  }, []);
+
+  const loadAuthData = useCallback(async () => {
+    try {
+      setAuthState(prev => ({ ...prev, isLoading: true, securityError: null }));
+
+      const [userData, tokenResult] = await Promise.all([
+        AsyncStorage.getItem(USER_STORAGE_KEY),
+        ApiKeyManager.getUserToken(),
+      ]);
+
+      if (!tokenResult.success) {
+        if (tokenResult.error === 'TOKEN_EXPIRED' || tokenResult.error?.includes('ACCESS_DENIED')) {
+          console.log('🔐 Token invalid, auto-logout...');
+          await logout();
+          return;
+        }
+        
+        setAuthState({
+          isLoggedIn: false,
+          user: null,
+          token: null,
+          isLoading: false,
+          securityError: null,
+          isLoggingOut: false,
+        });
+        return;
+      }
+
+      // Parse user data
+      let user = null;
+      try {
+        user = userData ? JSON.parse(userData) : null;
+      } catch (parseError) {
+        console.error('❌ Corrupted user data, clearing...', parseError);
+        await AsyncStorage.removeItem(USER_STORAGE_KEY);
+      }
+      
+      setAuthState({
+        isLoggedIn: true,
+        user,
+        token: tokenResult.token || null,
+        isLoading: false,
+        securityError: null,
+        isLoggingOut: false,
+      });
+
+    } catch (error: any) {
+      console.error('❌ Failed to load auth data:', error);
+      setAuthState(prev => ({ 
+        ...prev, 
+        isLoading: false,
+        securityError: 'Failed to load authentication data'
+      }));
+    }
+  }, [logout]);
+
+  const validateToken = useCallback(async (): Promise<boolean> => {
+    try {
+      const tokenResult = await ApiKeyManager.getUserToken();
+      return tokenResult.success && !!(tokenResult.token);
+    } catch (error) {
+      console.error('Token validation error:', error);
+      return false;
+    }
+  }, []);
+
+  const updateUser = useCallback(async (userData: User) => {
+    try {
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
+      setAuthState(prev => ({ ...prev, user: userData }));
+    } catch (error: any) {
+      console.error('Failed to update user:', error);
+      throw error;
+    }
+  }, []);
+
+  const saveUserPreferences = useCallback(async (preferences: any) => {
+    try {
+      await AsyncStorage.setItem(USER_PREFERENCES_KEY, JSON.stringify(preferences));
+    } catch (error: any) {
+      console.error('Failed to save preferences:', error);
+      throw error;
+    }
+  }, []);
+
+  const getUserPreferences = useCallback(async () => {
+    try {
+      const preferences = await AsyncStorage.getItem(USER_PREFERENCES_KEY);
+      return preferences ? JSON.parse(preferences) : null;
+    } catch (error: any) {
+      console.error('Failed to load preferences:', error);
+      return null;
+    }
+  }, []);
+
+  const getToken = useCallback(() => {
+    return authState.token;
+  }, [authState.token]);
+
+  const clearSecurityError = useCallback(() => {
+    setAuthState(prev => ({ ...prev, securityError: null }));
+  }, []);
+
+  const requireLogin = useCallback((): boolean => {
+    return authState.isLoggedIn && !authState.isLoading;
+  }, [authState.isLoggedIn, authState.isLoading]);
+
+  const validateUserId = useCallback((userId: string): ProfileDeepLinkResult => {
+    if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+      return {
+        success: false,
+        error: 'User ID is invalid',
+        isValidFormat: false,
+        userExists: false
+      };
+    }
+
+    const isValidFormat = /^[a-zA-Z0-9_-]{3,20}$/.test(userId);
+    if (!isValidFormat) {
+      return {
+        success: false,
+        error: 'User ID format is invalid. Must be 3-20 characters (letters, numbers, -, _)',
+        isValidFormat: false,
+        userExists: false
+      };
+    }
+
+    return {
+      success: true,
+      userId,
+      isValidFormat: true,
+      userExists: true
+    };
+  }, []);
+
+  const getUserById = useCallback((_userId: string): User | null => {
+    return null;
+  }, []);
 
   useEffect(() => {
     loadAuthData();
-  }, []);
-
-  const loadAuthData = async () => {
-    try {
-      const loggedIn = await AsyncStorage.getItem(IS_LOGGED_IN_KEY);
-      if (loggedIn === 'true') {
-        const userData = await AsyncStorage.getItem(USER_STORAGE_KEY);
-        if (userData) {
-          setUser(JSON.parse(userData));
-          setIsLoggedIn(true);
-        }
-      }
-    } catch (error) {
-      console.error('Gagal memuat data auth:', error);
-    }
-  };
-
-  const login = async (userData: User) => {
-    try {
-      await AsyncStorage.setItem(IS_LOGGED_IN_KEY, 'true');
-      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
-      setUser(userData);
-      setIsLoggedIn(true);
-    } catch (error) {
-      console.error('Gagal login:', error);
-      throw error;
-    }
-  };
-
-  const logout = async () => {
-    try {
-      await AsyncStorage.removeItem(IS_LOGGED_IN_KEY);
-      await AsyncStorage.removeItem(USER_STORAGE_KEY);
-      setUser(null);
-      setIsLoggedIn(false);
-    } catch (error) {
-      console.error('Gagal logout:', error);
-      throw error;
-    }
-  };
-
-  const updateUser = async (userData: User) => {
-    try {
-      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
-      setUser(userData);
-    } catch (error) {
-      console.error('Gagal update user:', error);
-      throw error;
-    }
-  };
-
-  // SOAL 5: Method untuk auth guard
-  const checkAuthStatus = (): boolean => {
-    return isLoggedIn;
-  };
+  }, [loadAuthData]);
 
   return {
-    isLoggedIn,
-    user,
+    isLoggedIn: authState.isLoggedIn,
+    user: authState.user,
+    token: authState.token,
+    isLoading: authState.isLoading,
+    securityError: authState.securityError,
+    isLoggingOut: authState.isLoggingOut,
     login,
     logout,
     updateUser,
+    saveUserPreferences,
+    getUserPreferences,
     loadAuthData,
-    checkAuthStatus, // Export untuk auth guard
+    getToken,
+    clearSecurityError,
+    requireLogin,
+    validateToken,
+    validateUserId,
+    getUserById,
   };
 };

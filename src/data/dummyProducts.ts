@@ -1,4 +1,4 @@
-import { Product } from '../navigation/types';
+import { Product, ProductDeepLinkResult } from '../navigation/types';
 
 export const dummyProducts: { [key: string]: Product[] } = {
   popular: [
@@ -282,4 +282,51 @@ export const getProductById = (id: string): Product | undefined => {
 // Helper function untuk mendapatkan produk by kategori
 export const getProductsByCategory = (category: string): Product[] => {
   return dummyProducts[category] || [];
+};
+
+// TAMBAH: Function untuk validasi dan handle deep link product
+export const validateAndGetProduct = (productId: string): ProductDeepLinkResult => {
+  // Validasi basic productId
+  if (!productId || typeof productId !== 'string' || productId.trim() === '') {
+    return {
+      success: false,
+      error: 'ID produk tidak valid'
+    };
+  }
+
+  // Cari produk
+  const product = getProductById(productId);
+  
+  if (!product) {
+    return {
+      success: false,
+      error: `Produk dengan ID ${productId} tidak ditemukan`
+    };
+  }
+
+  return {
+    success: true,
+    product,
+    isFromDeepLink: true
+  };
+};
+
+// TAMBAH: Function untuk get product dengan fallback
+export const getProductWithFallback = (productId: string): Product => {
+  const result = validateAndGetProduct(productId);
+  
+  if (result.success && result.product) {
+    return result.product;
+  }
+
+  // Fallback ke produk default
+  return {
+    id: productId,
+    nama: 'Produk Tidak Ditemukan',
+    harga: 0,
+    stok: 0,
+    deskripsi: `Maaf, produk dengan ID ${productId} tidak tersedia. Silakan cek ID produk atau hubungi customer service.`,
+    gambar: 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=400&h=300&fit=crop',
+    kategori: 'unknown'
+  };
 };

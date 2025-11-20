@@ -14,13 +14,39 @@ export default function ProfileStackNavigator() {
         cardStyle: {
           backgroundColor: colors.background,
         },
+        gestureEnabled: true,
+        gestureDirection: 'horizontal',
       }}
     >
       <Stack.Screen
         name="Profile"
         component={ProfileScreen}
-        options={{
-          title: 'Profil',
+        options={({ route }) => {
+          // Dynamic options berdasarkan deep link parameters
+          const fromDeepLink = route.params?.fromDeepLink;
+          const deepLinkUserId = route.params?.deepLinkUserId;
+          const validationError = route.params?.validationError;
+
+          let headerTitle = 'Profil';
+          
+          if (fromDeepLink && deepLinkUserId && !validationError) {
+            headerTitle = `Profil - ${deepLinkUserId}`;
+          } else if (fromDeepLink && validationError) {
+            headerTitle = 'Profil Tidak Ditemukan';
+          }
+
+          return {
+            title: headerTitle,
+            headerShown: true,
+            headerStyle: {
+              backgroundColor: colors.primary,
+            },
+            headerTintColor: colors.textOnPrimary,
+            headerTitleStyle: {
+              fontWeight: 'bold',
+              fontSize: 18,
+            },
+          };
         }}
         // ✅ PERBAIKAN: Pass parameter dengan route params
         initialParams={{

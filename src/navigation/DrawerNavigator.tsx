@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import FontAwesome6 from 'react-native-vector-icons/FontAwesome6';
@@ -8,16 +8,19 @@ import SettingsScreen from '../screens/SettingsScreen';
 import AboutScreen from '../screens/AboutScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import CheckoutScreen from '../screens/CheckoutScreen';
+import ProductListScreen from '../screens/ProductListScreen';
+import LoginScreen from '../screens/LoginScreen';
 import { colors } from '../color/colors';
 import { RootDrawerParamList } from './types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCart } from '../utils/useCart';
-
-const SETTINGS_STORAGE_KEY = '@app_settings';
+import WishlistScreen from '../screens/WishlistScreen';
+import WishlistIndicator from '../components/WishlistIndicator';
+// ✅ TAMBAH: Import AddToCartScreen
+import AddToCartScreen from '../screens/AddToCartScreen';
 
 const Drawer = createDrawerNavigator<RootDrawerParamList>();
 
-// ✅ PERBAIKAN 1: KELUARKAN KOMPONEN DARI RENDER
 const HeaderLeft = ({ navigation }: { navigation: any }) => (
   <FontAwesome6
     name="bars"
@@ -28,15 +31,14 @@ const HeaderLeft = ({ navigation }: { navigation: any }) => (
   />
 );
 
-// ✅ PERBAIKAN 2: TouchableCartIcon SEBAGAI KOMPONEN TERPISAH
 interface TouchableCartIconProps {
   getTotalItems: () => number;
   onPress: () => void;
 }
 
-const TouchableCartIcon: React.FC<TouchableCartIconProps> = ({ 
-  getTotalItems, 
-  onPress 
+const TouchableCartIcon: React.FC<TouchableCartIconProps> = ({
+  getTotalItems,
+  onPress,
 }) => {
   const totalItems = getTotalItems();
 
@@ -60,17 +62,17 @@ const TouchableCartIcon: React.FC<TouchableCartIconProps> = ({
   );
 };
 
-// ✅ PERBAIKAN 3: HeaderRight SEBAGAI KOMPONEN TERPISAH
 interface HeaderRightProps {
   navigation: any;
   getTotalItems: () => number;
 }
 
-const HeaderRight: React.FC<HeaderRightProps> = ({ 
-  navigation, 
-  getTotalItems 
+const HeaderRight: React.FC<HeaderRightProps> = ({
+  navigation,
+  getTotalItems,
 }) => (
   <View style={styles.headerRightContainer}>
+    <WishlistIndicator />
     <FontAwesome6
       name="magnifying-glass"
       size={24}
@@ -85,22 +87,44 @@ const HeaderRight: React.FC<HeaderRightProps> = ({
   </View>
 );
 
-// ✅ PERBAIKAN 4: ModalHeaderLeft SEBAGAI KOMPONEN TERPISAH - DIUBAH UNTUK NAVIGATE KE HOME
-interface ModalHeaderLeftProps {
-  navigation: any;
-}
+// ✅ FIXED: Hapus ModalHeaderLeft yang tidak digunakan
 
-const ModalHeaderLeft: React.FC<ModalHeaderLeftProps> = ({ navigation }) => (
-  <TouchableOpacity 
-    onPress={() => navigation.navigate('Home')} // ✅ NAVIGATE KE HOME
-    style={styles.modalCloseButton}
-  >
-    <FontAwesome6 name="arrow-left" size={20} color={colors.textOnPrimary} />
-  </TouchableOpacity>
-);
+const useSwipeSettingsRealTime = () => {
+  const [swipeEnabled, setSwipeEnabled] = React.useState(true);
 
-// ✅ PERBAIKAN 5: BUAT SCREEN OPTIONS SEBAGAI FUNGSI TERPISAH
-const createScreenOptions = (getTotalItems: () => number, swipeEnabled: boolean) => {
+  React.useEffect(() => {
+    let isMounted = true;
+    let intervalId: NodeJS.Timeout;
+
+    const loadSwipeSetting = async () => {
+      try {
+        const storedSettings = await AsyncStorage.getItem('@app_settings');
+        if (storedSettings && isMounted) {
+          const settings = JSON.parse(storedSettings);
+          setSwipeEnabled(settings.swipeDrawer);
+        }
+      } catch (error) {
+        console.error('Gagal load swipe setting:', error);
+      }
+    };
+
+    loadSwipeSetting();
+
+    intervalId = setInterval(loadSwipeSetting, 5000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, []);
+
+  return swipeEnabled;
+};
+
+const createScreenOptions = (
+  swipeEnabled: boolean,
+  getTotalItems: () => number,
+) => {
   return ({ navigation, route }: any) => ({
     drawerStyle: {
       backgroundColor: colors.card,
@@ -120,75 +144,57 @@ const createScreenOptions = (getTotalItems: () => number, swipeEnabled: boolean)
       fontSize: 18,
     },
     headerTitleAlign: 'center' as const,
-    
-    // ✅ HEADER COMPONENTS - SEKARANG STABIL
+
     headerLeft: () => <HeaderLeft navigation={navigation} />,
+
     headerRight: () => (
       <HeaderRight navigation={navigation} getTotalItems={getTotalItems} />
     ),
     headerTitle: route.params?.headerTitle || 'Belanja Skuy',
-    
-    // ✅ GESTURE CONFIGURATION
+
     swipeEnabled: swipeEnabled,
+    gestureEnabled: swipeEnabled,
     swipeEdgeWidth: swipeEnabled ? 30 : 0,
+
     drawerType: 'front' as const,
-    
-    // ✅ OPTIMASI PERFORMANCE
     lazy: true,
     detachInactiveScreens: true,
   });
 };
 
-// ✅ PERBAIKAN 6: BUAT OPTIONS UNTUK CHECKOUT SCREEN SEBAGAI FUNGSI TERPISAH - DIUBAH
-const getCheckoutOptions = ({ navigation }: any) => ({
+const CheckoutScreenOptions = ({ navigation }: any) => ({
   title: 'Keranjang Belanja',
   headerShown: true,
   headerLeft: () => (
-    <ModalHeaderLeft navigation={navigation} /> // ✅ PASS NAVIGATION PROP
+    <TouchableOpacity
+      onPress={() => navigation.goBack()}
+      style={styles.modalCloseButton}
+    >
+      <FontAwesome6 name="arrow-left" size={20} color={colors.textOnPrimary} />
+    </TouchableOpacity>
   ),
   swipeEnabled: false,
+  gestureEnabled: false,
 });
 
-// ✅ HOOK UNTUK SWIPE SETTINGS TETAP DI DALAM
-const useSwipeSettings = () => {
-  const [swipeEnabled, setSwipeEnabled] = useState(true);
-
-  const loadSwipeSetting = async () => {
-    try {
-      const storedSettings = await AsyncStorage.getItem(SETTINGS_STORAGE_KEY);
-      if (storedSettings) {
-        const settings = JSON.parse(storedSettings);
-        setSwipeEnabled(settings.swipeDrawer);
-      }
-    } catch (error) {
-      console.error('Gagal load swipe setting:', error);
-    }
-  };
-
-  useEffect(() => {
-    loadSwipeSetting();
-
-    const interval = setInterval(() => {
-      loadSwipeSetting();
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  return swipeEnabled;
+// ✅ TAMBAH: Options untuk AddToCartScreen (hidden)
+const AddToCartScreenOptions = {
+  headerShown: false,
+  swipeEnabled: false,
+  gestureEnabled: false,
 };
 
 export default function DrawerNavigator() {
-  const swipeEnabled = useSwipeSettings();
+  const swipeEnabled = useSwipeSettingsRealTime();
   const { getTotalItems } = useCart();
 
-  // ✅ PERBAIKAN 7: GUNAKAN FUNGSI YANG SUDAH DIBUAT
-  const screenOptions = createScreenOptions(getTotalItems, swipeEnabled);
+  const screenOptions = createScreenOptions(swipeEnabled, getTotalItems);
 
   return (
     <Drawer.Navigator
       drawerContent={CustomDrawerContent}
       screenOptions={screenOptions}
+      defaultStatus="closed"
     >
       <Drawer.Screen
         name="Home"
@@ -206,6 +212,14 @@ export default function DrawerNavigator() {
             enableAnalytics: true,
             experimentalFeatures: false,
           },
+        }}
+      />
+      <Drawer.Screen
+        name="Wishlist"
+        component={WishlistScreen}
+        options={{
+          title: 'Favorit Saya',
+          headerShown: true,
         }}
       />
       <Drawer.Screen
@@ -235,8 +249,29 @@ export default function DrawerNavigator() {
       <Drawer.Screen
         name="Checkout"
         component={CheckoutScreen}
-        // ✅ PERBAIKAN 8: GUNAKAN FUNGSI YANG SUDAH DIBUAT, BUKAN INLINE FUNCTION
-        options={getCheckoutOptions}
+        options={CheckoutScreenOptions}
+      />
+      <Drawer.Screen
+        name="ProductList"
+        component={ProductListScreen}
+        options={{
+          title: 'Product List (API)',
+          headerShown: true,
+        }}
+      />
+      <Drawer.Screen
+        name="Login"
+        component={LoginScreen}
+        options={{
+          title: 'Login',
+          headerShown: true,
+        }}
+      />
+      {/* ✅ TAMBAH: AddToCart Screen */}
+      <Drawer.Screen
+        name="AddToCart"
+        component={AddToCartScreen}
+        options={AddToCartScreenOptions}
       />
     </Drawer.Navigator>
   );

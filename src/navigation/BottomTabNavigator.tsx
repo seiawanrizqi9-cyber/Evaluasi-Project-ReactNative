@@ -5,6 +5,7 @@ import HomeStackNavigator from './HomeStackNavigator';
 import AboutScreen from '../screens/AboutScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import ProfileStackNavigator from './ProfileStackNavigator';
+import ProductListScreen from '../screens/ProductListScreen'; // IMPORT BARU
 import { colors } from '../color/colors';
 import { BottomTabParamList } from './types';
 
@@ -19,11 +20,19 @@ const HomeIcon = ({ focused, size }: { focused: boolean; size: number }) => (
   />
 );
 
+const ProductIcon = ({ focused, size }: { focused: boolean; size: number }) => (
+  <FontAwesome6 
+    name="box" 
+    size={size} 
+    color={focused ? colors.primary : '#000000ff'} 
+  />
+);
+
 const AboutIcon = ({ focused, size }: { focused: boolean; size: number }) => (
   <FontAwesome6 
     name="circle-info" 
     size={size} 
-    color={focused ? colors.primary : '#000000'}
+    color={focused ? colors.primary : '#000000ff'} 
   />
 );
 
@@ -31,7 +40,7 @@ const DashboardIcon = ({ focused, size }: { focused: boolean; size: number }) =>
   <FontAwesome6 
     name="chart-simple" 
     size={size} 
-    color={focused ? colors.primary : '#000000'}
+    color={focused ? colors.primary : '#000000ff'} 
   />
 );
 
@@ -39,7 +48,7 @@ const ProfileIcon = ({ focused, size }: { focused: boolean; size: number }) => (
   <FontAwesome6 
     name="user" 
     size={size} 
-    color={focused ? colors.primary : '#000000'}
+    color={focused ? colors.primary : '#000000ff'} 
   />
 );
 
@@ -76,10 +85,18 @@ export default function BottomTabNavigator() {
           title: 'Beranda',
           tabBarIcon: HomeIcon,
         }}
-        // 🎯 TERUSKAN PARAMETER DARI DRAWER KE HOME STACK
         initialParams={{ 
           fromTab: 'Data dari Bottom Tab',
           inheritedFromDrawer: true
+        }}
+      />
+      {/* TAB BARU: PRODUK */}
+      <Tab.Screen
+        name="ProductList"
+        component={ProductListScreen}
+        options={{
+          title: 'Produk',
+          tabBarIcon: ProductIcon,
         }}
       />
       <Tab.Screen

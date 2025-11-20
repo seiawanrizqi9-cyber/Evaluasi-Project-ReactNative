@@ -1,8 +1,10 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, Image, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { Product } from '../navigation/types';
 import { colors } from '../color/colors';
 import { useCart } from '../utils/useCart';
+import { useNetInfo } from '../utils/useNetInfo';
+import WishlistButton from './WishlistButton'; // ✅ TAMBAH IMPORT
 
 const formatRupiah = (angka: number) => {
   return 'Rp ' + angka.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -15,11 +17,17 @@ interface Props {
 
 export default function ProductCard({ product, onPress }: Props) {
   const { addToCart } = useCart();
+  const netInfo = useNetInfo();
 
-  // ✅ UBAH: Button pesan langsung tambah ke keranjang TANPA ALERT
   const handlePesan = () => {
+    if (!netInfo.isInternetReachable) {
+      Alert.alert(
+        'Mode Offline',
+        'Produk berhasil ditambahkan ke keranjang. Data akan disinkronisasi ketika online.',
+        [{ text: 'Mengerti' }]
+      );
+    }
     addToCart(product);
-    // ✅ HAPUS ALERT - langsung tambah ke keranjang tanpa notifikasi
   };
 
   const finalPrice = product.diskon 
@@ -32,7 +40,17 @@ export default function ProductCard({ product, onPress }: Props) {
       onPress={() => onPress && onPress(product)}
       activeOpacity={0.7}
     >
-      {/* Gambar di Samping Kiri */}
+      {!netInfo.isInternetReachable && (
+        <View style={styles.offlineBadge}>
+          <Text style={styles.offlineBadgeText}>📶</Text>
+        </View>
+      )}
+
+      {/* ✅ TAMBAH WISHLIST BUTTON DI SUDUT */}
+      <View style={styles.wishlistButton}>
+        <WishlistButton product={product} size={20} />
+      </View>
+
       <View style={styles.imageContainer}>
         {product.gambar ? (
           <Image source={{ uri: product.gambar }} style={styles.image} />
@@ -43,14 +61,11 @@ export default function ProductCard({ product, onPress }: Props) {
         )}
       </View>
 
-      {/* Info Produk di Samping Kanan */}
       <View style={styles.infoContainer}>
-        {/* Nama Produk */}
         <Text style={styles.name} numberOfLines={2}>
           {product.nama}
         </Text>
         
-        {/* Harga dan Diskon */}
         <View style={styles.priceSection}>
           {product.diskon ? (
             <View style={styles.discountContainer}>
@@ -71,12 +86,12 @@ export default function ProductCard({ product, onPress }: Props) {
           )}
         </View>
 
-        {/* Stok dan Button */}
         <View style={styles.footer}>
           <Text style={styles.stok}>Stok: {product.stok}</Text>
-          {/* ✅ UBAH: Button pesan langsung tambah ke keranjang TANPA ALERT */}
           <TouchableOpacity style={styles.pesanButton} onPress={handlePesan}>
-            <Text style={styles.pesanButtonText}>Pesan</Text>
+            <Text style={styles.pesanButtonText}>
+              {!netInfo.isInternetReachable ? '➕' : 'Pesan'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -100,6 +115,30 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
     minHeight: 120,
+    position: 'relative',
+  },
+  // ✅ TAMBAH STYLE WISHLIST BUTTON
+  wishlistButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    zIndex: 2,
+  },
+  offlineBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 40, // ✅ UPDATE POSITION KARENA ADA WISHLIST BUTTON
+    backgroundColor: colors.warning,
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  offlineBadgeText: {
+    fontSize: 12,
+    color: colors.textOnPrimary,
   },
   imageContainer: {
     marginRight: 12,
